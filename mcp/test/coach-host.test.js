@@ -4,6 +4,8 @@ import { createCoachServer, CoachHost, batteryFromReport } from '../coach-host.j
 import {mkdtemp,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import { CalibrationWorkflow } from '../calibration-workflow.js';
+import { compareSessionReports } from '../session-comparison.js';
 
 function savedRound(id,peak=2) {
   return {id,complete:true,controller:{productId:3302,path:'fixture'},captures:['rest','range','release','buttons','verify'].map((phase,i)=>({number:i+1,phase,metrics:{valid:true,mode:'usb',samples:250,durationMs:5000,maxGapMs:20,left:{valid:true,peakRadiusPercent:peak,p99RadiusPercent:peak},right:{valid:true,peakRadiusPercent:peak,p99RadiusPercent:peak}}}))};
@@ -69,6 +71,80 @@ test('separate retest runs in one session count as distinct rounds without reusi
   assert.equal(view.rounds[0].left.observedPeakPercent,4);
   assert.equal(view.rounds[1].left.observedPeakPercent,2);
   assert.equal(view.comparison.left.suggestedDeadzonePercent,5);
+});
+
+test('a fresh check after saved trial and confirmed restart starts a compatible live series',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'coach-round-epoch-'));
+  try{
+    const workflow=new CalibrationWorkflow(root),reports=new Map();
+    const baseline={...savedRound('baseline',4),calibrationActions:[]};reports.set(baseline.id,baseline);
+    const store={get:id=>structuredClone(reports.get(id)),report:id=>structuredClone(reports.get(id)),save:report=>reports.set(report.id,structuredClone(report)),log(){}};
+    const before={controller:{productId:0x0ce6,serialNumber:'PRIVATE-FACTORY'},words:Array(12).fill(2000),nvsStatus:'locked(temporary)'};
+    const after={...before,words:Array(12).fill(2001)};let actual=before;
+    const operations=[],host=new CoachHost(store,{workflow,wait:async()=>{host.lastAt=performance.now();},worker:async input=>{
+      operations.push(input.operation);
+      if(input.operation==='inspect')return actual;
+      if(input.operation==='trial'){
+        actual=after;const report=store.get(baseline.id);
+        report.calibrationActions.push({kind:'temporary_center',status:'applied',at:'2026-11-13T12:00:00Z',result:{after}});store.save(report);
+        return {before,after};
+      }
+      if(input.operation==='save')return {saveAcknowledged:true,persistenceVerified:false};
+      if(input.operation==='verify')return {persistenceVerified:true,calibrationMatches:true,restartEvidence:'owner_confirmed',snapshot:after};
+      throw Error('Unexpected hardware fixture operation');
+    }});
+    host.connect=()=>{host.c={info:{productId:0x0ce6},close(){}};host.latest={mode:'usb'};host.lastAt=performance.now();};host.connect();
+    host.sessionId=baseline.id;host.result={complete:true,report:baseline};host.status='complete';host.rememberRound(baseline,0);
+    await host.prepareCalibrationResult(baseline);
+    await host.control('calibration_trial',{confirm:'TRY_TEMPORARY_CENTER'});
+    const retest=store.get(baseline.id);retest.captures.push(...savedRound('unused',2).captures.map(c=>({...c,number:c.number+5,calibrationEpoch:1})));store.save(retest);
+    host.result={complete:true,report:retest};host.status='complete';host.rememberRound(retest,5);await host.prepareCalibrationResult(retest);
+    const reviewId=host.calibrationState().reviewId;
+    await host.control('calibration_save',{confirm:'SAVE_REVIEWED_CALIBRATION',reviewId});
+    await host.control('calibration_verify',{restartConfirmed:true});
+    assert.equal(store.get(baseline.id).calibrationPersistence.status,'verified');
+    assert.equal(workflow.snapshot().stage,'verified');
+    const fresh=savedRound('fresh-after-restart',3);store.save(fresh);host.sessionId=fresh.id;host.result={complete:true,report:fresh};host.rememberRound(fresh,0);await host.prepareCalibrationResult(fresh);
+    const view=host.snapshot().measurements;
+    assert.equal(view.rounds.length,1);assert.equal(view.comparison.acceptedRounds,1);assert.equal(view.comparison.left.observedPeakPercent,3);
+    assert.equal(host.snapshot().status,'complete');assert.equal(host.calibrationState().stage,'measured');
+    assert.equal(view.seriesReset,true);
+    host.rememberRound(savedRound('repeat-same-state',1),0);
+    assert.equal(host.snapshot().measurements.comparison.acceptedRounds,2);assert.equal(host.snapshot().measurements.comparison.left.observedPeakPercent,3);
+    assert.equal(host.snapshot().measurements.seriesReset,true);
+    assert.equal(store.get(baseline.id).captures.length,10);assert.equal(store.get(baseline.id).calibrationActions.length,1);
+    assert.deepEqual(operations,['inspect','inspect','trial','inspect','inspect','save','verify','inspect']);
+    assert.equal(compareSessionReports([retest,fresh]).comparable,false,'saved evidence remains incompatible outside the live series');
+    await host.control('reset_rounds');assert.equal(host.snapshot().measurements.seriesReset,false);
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('live series resets for valid controller, transport and full-history changes without pooling epochs',()=>{
+  for(const change of [
+    r=>{r.controller={...r.controller,path:'different-private-path'};},
+    r=>{r.captures.forEach(c=>{c.metrics.mode='bt';});},
+    r=>{r.calibrationActions=[{at:'different-action'}];},
+  ]){
+    const host=new CoachHost({}),previous={...savedRound('previous',5),calibrationActions:[{at:'first-action'}]};previous.captures.forEach(c=>{c.calibrationEpoch=1;});
+    const next=structuredClone(previous);next.id='new-boundary';next.captures.forEach(c=>{c.metrics.left.peakRadiusPercent=2;c.metrics.left.p99RadiusPercent=2;});change(next);
+    host.rememberRound(previous);host.rememberRound(next);
+    assert.equal(host.snapshot().measurements.rounds.length,1);assert.equal(host.snapshot().measurements.comparison.acceptedRounds,1);
+    assert.equal(host.snapshot().measurements.comparison.left.observedPeakPercent,2);
+    assert.equal(compareSessionReports([previous,next]).comparable,false);
+  }
+});
+
+test('invalid rounds cannot erase valid worst evidence and latest comparison remains separately available',()=>{
+  const host=new CoachHost({}),worst=savedRound('worst',8),invalid=savedRound('invalid',1);invalid.controller.path='another-private-controller';invalid.captures.at(-1).metrics.valid=false;
+  host.rememberRound(worst);host.rememberRound(invalid);
+  let view=host.snapshot().measurements;
+  assert.equal(view.rounds.length,2);assert.equal(view.comparison.left.observedPeakPercent,8);assert.equal(view.latestComparison.comparable,false);
+  host.rememberRound(savedRound('latest',2));view=host.snapshot().measurements;
+  assert.equal(view.comparison.acceptedRounds,2);assert.equal(view.comparison.left.observedPeakPercent,8);
+  assert.equal(view.latestComparison.acceptedRounds,1);assert.equal(view.latestComparison.left.observedPeakPercent,2);
+  assert.equal(host.snapshot().measurements.latestComparison,view.latestComparison);
+  assert.doesNotMatch(JSON.stringify(view),/another-private-controller|fixture|"id"|calibrationActions/);
+  host.disconnect();assert.equal(host.snapshot().measurements.latestComparison.acceptedRounds,0);assert.equal(host.snapshot().measurements.seriesReset,false);
 });
 
 test('preparation, phase progress and current corrections remain distinct in snapshots',()=>{

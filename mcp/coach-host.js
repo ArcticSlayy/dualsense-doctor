@@ -27,7 +27,7 @@ export class CoachHost {
   constructor(store=new SessionStore(),{workflow,worker=runCalibrationWorker,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),enableCalibration=true}={}) {
     this.store=store;this.c=null;this.queue=[];this.latest=null;this.lastAt=0;this.events=[];this.run=null;this.status='idle';this.instruction='Connect your controller, then start the guided check.';this.warning=null;this.progress=0;this.currentIndex=0;this.resumeIndex=0;this.completedSteps=new Set();this.sequence=0;this.inputCount=0;this.rateAt=performance.now();this.inputHz=0;
     this.effects={lightbar:null,triggers:null};this.battery=null;this.firmware=null;
-    this.roundReports=[];this.roundTarget=1;this.roundGeneration=0;this.refreshMeasurements();
+    this.roundReports=[];this.roundTarget=1;this.roundGeneration=0;this.seriesReset=false;this.refreshMeasurements();
     this.calibrationWorkflow=workflow??(store.root?new CalibrationWorkflow(join(store.root,'calibration-history')):null);
     this.calibrationWorker=worker;this.wait=wait;this.enableCalibration=enableCalibration;
     this.calibrationOperation=null;this.calibrationCountdownUntil=0;this.calibrationRequiresRestart=this.calibrationWorkflow?.needsRestart?.()||false;
@@ -157,7 +157,7 @@ export class CoachHost {
     // Compute only when the round set changes; fixed explanatory prose stays in
     // reports rather than being repeated in the high-rate live feed.
     const {note,...tuning}=assessStickTuning(this.roundReports.at(-1));
-    this.measurements={targetRounds:this.roundTarget,comparison:compareSessionReports(this.roundReports),tuning,rounds:this.roundReports.map((report,i)=>{
+    this.measurements={targetRounds:this.roundTarget,comparison:compareSessionReports(this.roundReports),latestComparison:compareSessionReports(this.roundReports.slice(-1)),seriesReset:this.seriesReset,tuning,rounds:this.roundReports.map((report,i)=>{
       const summary=compareSessionReports([report]);
       return {number:i+1,complete:summary.acceptedRounds===1,...Object.fromEntries(['left','right'].map(side=>[side,{observedPeakPercent:summary[side]?.observedPeakPercent??null,suggestedDeadzonePercent:summary[side]?.suggestedDeadzonePercent??null,circularityPercent:summary[side]?.circularity?.latest??null}]))};
     })};
@@ -165,10 +165,18 @@ export class CoachHost {
   rememberRound(report,afterCaptureNumber) {
     if(report&&Number.isInteger(afterCaptureNumber))report={...report,id:`${report.id}@${afterCaptureNumber}`,captures:report.captures.filter(c=>c.number>afterCaptureNumber)};
     if(!report?.complete||!report.id||this.roundReports.some(r=>r.id===report.id))return;
+    // Histories belong to individual sessions: a post-save fresh session may have
+    // no actions while the reviewed retest retains its trial history. Let the
+    // strict comparator define compatibility, then begin a new live series rather
+    // than pooling them. Invalid incoming evidence must not erase a valid worst
+    // round; saved session evidence is never changed by this live-series reset.
+    if(compareSessionReports([report]).comparable&&this.roundReports.some(previous=>compareSessionReports([previous]).comparable&&!compareSessionReports([previous,report]).comparable)){
+      this.clearRounds();this.seriesReset=true;
+    }
     if(this.roundReports.length>=10)return;
     this.roundReports.push(report);this.refreshMeasurements();
   }
-  clearRounds(){this.roundReports=[];this.roundGeneration++;this.refreshMeasurements();}
+  clearRounds(){this.roundReports=[];this.roundGeneration++;this.seriesReset=false;this.refreshMeasurements();}
   event(e) {
     if(e.type==='instruction') {this.currentIndex=RUN_STEPS.findIndex(s=>s.phase===e.phase&&s.direction===e.direction);this.warning=null;this.details={};this.prepareDurationSeconds=e.countdownSeconds||0;this.prepareUntil=performance.now()+this.prepareDurationSeconds*1000;this.secondsRemaining=null;this.phaseProgress=0;this.progress=this.currentIndex/RUN_STEPS.length;}
     if(e.type==='phase_start')this.prepareUntil=0;
