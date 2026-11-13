@@ -38,7 +38,7 @@ server.registerTool('live_coach_state',{description:'Current live axes, coaching
 });
 server.registerTool('live_coach_control',{
   description:'Control adaptive guided checks, connect/disconnect the live view, and explicitly send temporary lightbar or adaptive-trigger effects. Start measurement once; later phases advance from evidence. Trigger effects require a paused/idle check and compatible motors. No calibration or flash command.',
-  inputSchema:{action:z.enum(['connect','disconnect','start','pause','resume','stop','lightbar','triggers']),r:z.number().int().min(0).max(255).optional(),g:z.number().int().min(0).max(255).optional(),b:z.number().int().min(0).max(255).optional(),preset:z.enum(['off','light','firm','max','weapon','custom']).optional(),target:z.enum(['both','left','right']).optional(),position:z.number().int().min(0).max(9).optional(),strength:z.number().int().min(1).max(8).optional()},
+  inputSchema:{action:z.enum(['connect','disconnect','start','pause','resume','stop','lightbar','triggers','reset_rounds']),roundTarget:z.union([z.literal(1),z.literal(3),z.literal(5)]).optional(),r:z.number().int().min(0).max(255).optional(),g:z.number().int().min(0).max(255).optional(),b:z.number().int().min(0).max(255).optional(),preset:z.enum(['off','light','firm','max','weapon','custom']).optional(),target:z.enum(['both','left','right']).optional(),position:z.number().int().min(0).max(9).optional(),strength:z.number().int().min(1).max(8).optional()},
 },async(input)=>{
   const info=await ensureCoach();const r=await fetch(`${info.apiBase}/control?token=${info.token}`,{method:'POST',body:JSON.stringify(input)});const result=await r.json();if(!r.ok)throw Error(result.error);return ok(result);
 });

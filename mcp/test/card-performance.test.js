@@ -129,7 +129,7 @@ test('battery and firmware remain unavailable until reported; effect preferences
  assert.equal(run.nodes.get('controller-battery').textContent,'Unavailable');assert.equal(run.nodes.get('controller-firmware').textContent,'Unavailable');
  const s=run.input();s.battery={level:75,status:'charging'};s.firmware={build:'Synthetic build'};s.effects={lightbar:{r:10,g:20,b:30,sentAt:'synthetic-time',commandSent:true,deviceConfirmed:false}};run.accept(s);
  assert.equal(run.nodes.get('controller-battery').textContent,'75% · Charging');assert.equal(run.nodes.get('controller-firmware').textContent,'Synthetic build');
- assert.equal(run.nodes.get('lightbar-status').textContent,'Sent · temporary');
+ assert.equal(run.nodes.get('lightbar-status').textContent,'Color sent');
  run.change('trail-mode','short');const saved=JSON.parse(run.storage.get('dualsense-coach-display'));
  assert.deepEqual(Object.keys(saved).sort(),['rates','rings','trails','units','view']);
 });
@@ -138,7 +138,7 @@ test('lightbar errors are clear and a successful reply is described only as sent
  const failed=setup({controlResponse:{ok:false,body:{error:'Synthetic controller unavailable'}}});failed.accept(failed.input());failed.click('lightbar-apply');
  await new Promise(r=>setImmediate(r));assert.match(failed.nodes.get('lightbar-status').textContent,/Synthetic controller unavailable/);assert.equal(failed.nodes.get('lightbar-apply').disabled,false);
  const success=setup({controlResponse:{body:{connected:true,status:'idle',effects:{lightbar:{r:1,g:2,b:3,sentAt:'new',commandSent:true,deviceConfirmed:false}}}}});success.accept(success.input());success.click('lightbar-apply');
- await new Promise(r=>setImmediate(r));assert.equal(success.nodes.get('lightbar-status').textContent,'Sent · temporary');assert.doesNotMatch(success.nodes.get('lightbar-status').textContent,/confirmed|saved|applied/i);
+ await new Promise(r=>setImmediate(r));assert.equal(success.nodes.get('lightbar-status').textContent,'Color sent');assert.doesNotMatch(success.nodes.get('lightbar-status').textContent,/confirmed|saved|applied/i);
 });
 
 test('disconnected controller metadata is unavailable even when old values remain',()=>{
@@ -175,7 +175,7 @@ test('invalid custom trigger parameters do not send a command',()=>{
 
 test('trigger success and errors describe a send rather than physical calibration',async()=>{
  const run=setup({controlResponse:{body:{connected:true,status:'idle',effects:{triggers:{preset:'firm',target:'both',sentAt:'synthetic',commandSent:true,deviceConfirmed:false}}}}});run.accept(run.input());run.change('trigger-preset','firm');run.click('trigger-apply');
- await new Promise(r=>setImmediate(r));assert.equal(run.nodes.get('trigger-status').textContent,'Sent · temporary');
+ await new Promise(r=>setImmediate(r));assert.equal(run.nodes.get('trigger-status').textContent,'Trigger effect sent');
  const failed=setup({controlResponse:{ok:false,body:{error:'Synthetic trigger failure'}}});failed.accept(failed.input());failed.click('trigger-reset');await new Promise(r=>setImmediate(r));assert.match(failed.nodes.get('trigger-status').textContent,/Synthetic trigger failure/);
 });
 
@@ -236,4 +236,61 @@ test('all customization options share one disclosure with named groups',()=>{
 test('resolved server corrections clear when good movement is reported',()=>{
  const run=setup(),s=run.input();s.status='running';s.warning='Slow down.';run.accept(s);assert.equal(run.nodes.get('feedback').dataset.warning,'true');
  s.warning=null;run.accept(s);assert.equal(run.nodes.get('feedback').dataset.warning,'false');assert.doesNotMatch(run.nodes.get('feedback').textContent,/Slow down/);
+});
+
+test('lightbar Apply is prominent and available before a test, with actionable disabled reasons',()=>{
+ const run=setup();assert.match(html,/<button id="lightbar-apply" class="primary"[^>]*aria-describedby="lightbar-help"/);
+ assert.equal(run.nodes.get('lightbar-apply').disabled,true);assert.match(run.nodes.get('lightbar-help').textContent,/Connecting to the local coach/);
+ run.accept({...run.input(),connected:false,latest:null});assert.match(run.nodes.get('lightbar-help').textContent,/Connect the controller/);assert.equal(run.nodes.get('lightbar-connect').hidden,false);
+ for(const status of ['idle','paused','running','complete']){run.accept({...run.input(),status});assert.equal(run.nodes.get('lightbar-apply').disabled,false);assert.match(run.nodes.get('lightbar-help').textContent,/Ready to apply. No test is required/);}
+ run.step(301);assert.equal(run.nodes.get('lightbar-apply').disabled,true);assert.match(run.nodes.get('lightbar-help').textContent,/Waiting for fresh/);
+ run.accept(run.input());assert.equal(run.nodes.get('lightbar-apply').disabled,false);assert.equal(run.nodes.get('lightbar-connect').hidden,true);
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+});
+test('an empty comparison does not show fabricated results before the first round',()=>{
+ const run=setup();run.accept({...run.input(),measurements:{targetRounds:5,rounds:[],comparison:{acceptedRounds:0,excludedRounds:0,comparable:false,left:null,right:null}}});
+ assert.equal(run.nodes.get('results').hidden,true);
+});
+
+test('lightbar connection recovery does not start a test or apply an effect',async()=>{
+ const live={connected:true,status:'idle',latest:{lx:128,ly:128,rx:128,ry:128,mode:'usb'},ageMs:0};
+ const run=setup({controlResponse:{body:live}});run.accept({connected:false,status:'idle',ageMs:null,latest:null});
+ run.click('lightbar-connect');assert.equal(run.nodes.get('lightbar-apply').disabled,true);assert.match(run.nodes.get('lightbar-help').textContent,/Sending a command/);
+ await new Promise(r=>setImmediate(r));run.step();assert.equal(run.nodes.get('lightbar-apply').disabled,false);
+ const commands=run.requests.filter(r=>r.url.includes('/control')).map(r=>JSON.parse(r.options.body));assert.deepEqual(commands,[{action:'connect'}]);
+});
+
+const measuredSide=(peak=3,deadzone=4)=>({suggestedDeadzonePercent:deadzone,observedPeakPercent:peak,worstP99Percent:peak-.2,roundSpreadPercent:1,circularity:{min:7,max:8,latest:7.5}});
+const measuredRounds=()=>({targetRounds:5,rounds:Array.from({length:5},(_,i)=>({number:i+1,complete:true,left:measuredSide(i+2,i+3),right:measuredSide(i+3,i+4)})),comparison:{acceptedRounds:5,excludedRounds:0,comparable:true,left:measuredSide(6,7),right:measuredSide(7,8),applied:false,note:'Largest observed resting excursion plus one percentage point. No settings applied; verify in game.'}});
+
+test('complete repeat measurements show conservative server candidates and a round comparison',()=>{
+ const run=setup();run.accept({...run.input(),status:'complete',measurements:measuredRounds()});
+ assert.equal(run.nodes.get('results').hidden,false);assert.equal(run.nodes.get('left-deadzone').textContent,'7%');assert.equal(run.nodes.get('right-deadzone').textContent,'8%');
+ assert.match(run.nodes.get('left-circularity').textContent,/7.5%/);assert.match(run.nodes.get('round-status').textContent,/5 \/ 5 comparable/);
+ assert.equal(run.nodes.get('round-history').hidden,false);assert.equal(run.nodes.get('round-4-left').textContent,'7%');assert.equal(run.nodes.get('round-5').hidden,true);
+ assert.equal(run.nodes.get('round-4-right-bar').style.width,'100%');assert.match(run.nodes.get('results-note').textContent,/No settings applied/);
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+});
+
+test('unavailable or incompatible measurements never become zero-deadzone claims',()=>{
+ const run=setup();run.accept(run.input());assert.equal(run.nodes.get('results').hidden,true);
+ const data=measuredRounds();data.comparison.comparable=false;data.comparison.reason='Transport changed; start a new comparison.';
+ run.accept({...run.input(),measurements:data});assert.equal(run.nodes.get('left-deadzone').textContent,'Unavailable');assert.equal(run.nodes.get('round-history').hidden,true);assert.match(run.nodes.get('results-summary').textContent,/Transport changed/);
+ data.comparison.comparable=true;data.comparison.left.circularity={min:null,max:null,latest:null};data.comparison.left.suggestedDeadzonePercent=null;
+ run.accept({...run.input(),measurements:data});assert.equal(run.nodes.get('left-deadzone').textContent,'Unavailable');assert.match(run.nodes.get('left-circularity').textContent,/full outer-edge coverage/);
+});
+
+test('round goal selection stays local until an explicit start or repeat',()=>{
+ for(const id of ['start','repeat-round']){
+  const run=setup();run.accept({...run.input(),status:'complete',measurements:{...measuredRounds(),targetRounds:1}});run.change('round-target','5');
+  run.accept({...run.input(),status:'complete',measurements:{...measuredRounds(),targetRounds:1}});assert.equal(run.nodes.get('round-target').value,'5');
+  assert.ok(!run.requests.some(r=>r.url.includes('/control')));run.click(id);
+  const request=run.requests.find(r=>r.url.includes('/control'));assert.deepEqual(JSON.parse(request.options.body),{roundTarget:5,action:'start'});
+ }
+});
+
+test('new comparison clears only saved comparison state and is blocked during a run',()=>{
+ const run=setup();run.accept({...run.input(),status:'running',measurements:measuredRounds()});run.click('reset-rounds');assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+ run.accept({...run.input(),status:'complete',measurements:measuredRounds()});run.click('reset-rounds');
+ const request=run.requests.find(r=>r.url.includes('/control'));assert.deepEqual(JSON.parse(request.options.body),{action:'reset_rounds'});
 });

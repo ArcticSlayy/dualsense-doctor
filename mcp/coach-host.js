@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Controller, parseSticks, listControllers, TRIGGER_PRESETS, effFeedback } from './hid/dualsense.js';
 import { SessionStore } from './guided.js';
 import { runGuided, RUN_STEPS } from './coach-runner.js';
+import { compareSessionReports } from './session-comparison.js';
 
 // Sony's battery nibble reports 10% intervals; use midpoint estimates except full.
 export function batteryFromReport(buf,mode) {
@@ -18,7 +19,20 @@ export class CoachHost {
   constructor(store=new SessionStore()) {
     this.store=store;this.c=null;this.queue=[];this.latest=null;this.lastAt=0;this.events=[];this.run=null;this.status='idle';this.instruction='Connect your controller, then start the guided check.';this.warning=null;this.progress=0;this.currentIndex=0;this.resumeIndex=0;this.completedSteps=new Set();this.sequence=0;this.inputCount=0;this.rateAt=performance.now();this.inputHz=0;
     this.effects={lightbar:null,triggers:null};this.battery=null;this.firmware=null;
+    this.roundReports=[];this.roundTarget=1;this.roundGeneration=0;this.refreshMeasurements();
   }
+  refreshMeasurements() {
+    this.measurements={targetRounds:this.roundTarget,comparison:compareSessionReports(this.roundReports),rounds:this.roundReports.map((report,i)=>{
+      const summary=compareSessionReports([report]);
+      return {number:i+1,complete:summary.acceptedRounds===1,...Object.fromEntries(['left','right'].map(side=>[side,{observedPeakPercent:summary[side]?.observedPeakPercent??null,suggestedDeadzonePercent:summary[side]?.suggestedDeadzonePercent??null,circularityPercent:summary[side]?.circularity?.latest??null}]))};
+    })};
+  }
+  rememberRound(report) {
+    if(!report?.complete||!report.id||this.roundReports.some(r=>r.id===report.id))return;
+    if(this.roundReports.length>=10)return;
+    this.roundReports.push(report);this.refreshMeasurements();
+  }
+  clearRounds(){this.roundReports=[];this.roundGeneration++;this.refreshMeasurements();}
   event(e) {
     if(e.type==='instruction') {this.currentIndex=RUN_STEPS.findIndex(s=>s.phase===e.phase&&s.direction===e.direction);this.warning=null;this.details={};this.prepareDurationSeconds=e.countdownSeconds||0;this.prepareUntil=performance.now()+this.prepareDurationSeconds*1000;this.secondsRemaining=null;this.phaseProgress=0;this.progress=this.currentIndex/RUN_STEPS.length;}
     if(e.type==='phase_start')this.prepareUntil=0;
@@ -45,10 +59,13 @@ export class CoachHost {
     c.dev.on('error',e=>{if(this.c!==c)return;this.warning=`Controller input lost: ${e.message}`;this.disconnect();this.status='error';});
     this.instruction='Live view connected. Start once; follow the changing instructions.';
   }
-  disconnect(){this.abort?.abort();const c=this.c;this.c=null;c?.close();this.latest=null;this.queue=[];this.battery=null;this.firmware=null;this.effects={lightbar:null,triggers:null};if(this.status==='running')this.status='paused';}
-  async launch(resume=false) {
+  disconnect(){this.abort?.abort();const c=this.c;this.c=null;c?.close();this.latest=null;this.queue=[];this.battery=null;this.firmware=null;this.effects={lightbar:null,triggers:null};this.clearRounds();if(this.status==='running')this.status='paused';}
+  async launch(resume=false,roundTarget=this.roundTarget) {
     if(this.run)throw Error('A guided check is already running.');
+    if(![1,3,5].includes(roundTarget))throw Error('Choose 1, 3, or 5 comparison rounds.');
+    if(!resume&&this.roundReports.length>=10)throw Error('Ten rounds are saved. Start a new comparison to continue.');
     if(!this.c||performance.now()-this.lastAt>300)throw Error('Waiting for fresh controller input.');
+    this.roundTarget=roundTarget;this.refreshMeasurements();const generation=this.roundGeneration;
     this.queue=[];this.abort=new AbortController();this.status='running';this.warning=null;this.result=null;
     const startIndex=resume?this.resumeIndex:0;
     if(!resume){this.progress=0;this.sessionId=null;this.events=[];this.completedSteps.clear();}
@@ -56,7 +73,7 @@ export class CoachHost {
     const proxy={info:this.c.info,_readOnce:()=>this.queue.shift()||null};
     const task=runGuided(proxy,this.store,{signal:this.abort.signal,steps:RUN_STEPS.slice(startIndex),existingSession:resume?this.sessionId:undefined,onEvent:e=>this.event(e)});
     this.run=task;
-    task.then(result=>{this.result=result;this.status=result.complete?'complete':'paused';if(!result.complete){this.warning=result.reason;this.resumeIndex=this.currentIndex===2?1:this.currentIndex;}else{this.progress=1;this.warning=null;}}).catch(e=>{
+    task.then(result=>{this.result=result;this.status=result.complete?'complete':'paused';if(!result.complete){this.warning=result.reason;this.resumeIndex=this.currentIndex===2?1:this.currentIndex;}else{this.progress=1;this.warning=null;if(generation===this.roundGeneration)this.rememberRound(result.report);}}).catch(e=>{
       if(this.status!=='paused'&&this.status!=='idle'){this.status='error';this.warning=e.message;}
     }).finally(()=>{if(this.run===task)this.run=null;});
   }
@@ -78,7 +95,11 @@ export class CoachHost {
       this.c.applyTriggers(target==='right'?null:effect,target==='left'?null:effect);
       this.effects.triggers={preset,target,position,strength,commandSent:true,deviceConfirmed:false,sentAt:new Date().toISOString()};
     }
-    else if(action==='start')await this.launch();
+    else if(action==='start')await this.launch(false,input.roundTarget??this.roundTarget);
+    else if(action==='reset_rounds'){
+      if(this.run||['running','paused'].includes(this.status))throw Error('Stop the current check before starting a new comparison.');
+      this.clearRounds();this.instruction='Comparison cleared. Saved session logs are retained.';
+    }
     else if(action==='pause'){
       if(this.status!=='running')throw Error('No active guided check to pause.');
       this.resumeIndex=this.currentIndex===2?1:this.currentIndex;this.status='paused';this.abort.abort();
@@ -96,6 +117,7 @@ export class CoachHost {
     const labels=['Rest','Clockwise','Counterclockwise','Release','Buttons','Verify'];
     return {connected:!!this.c,status:this.status,latest:ageMs!==null&&ageMs<300?this.latest:null,ageMs,sequence:this.sequence,inputHz:this.inputHz,publishHz:125,clientMetrics:this.clientMetrics||null,battery:this.battery,firmware:this.firmware,effects:this.effects,controller:this.c?{product:this.c.info.product,productId:this.c.info.productId}:null,
       phase:step?.phase||null,direction:step?.direction||null,phaseProgress:this.phaseProgress||0,preparing,prepareSecondsRemaining,prepareDurationSeconds:this.prepareDurationSeconds||0,
+      measurements:this.measurements,
       instruction:this.instruction,warning:this.warning,progress:this.progress,secondsRemaining:active?(preparing?Math.ceil(prepareSecondsRemaining):this.secondsRemaining??null):null,details:active?(this.details||{}):{},sessionId:this.sessionId||null,result:this.result?{complete:this.result.complete,logPath:this.result.report?.logPath,reason:this.result.reason}:null,events:this.events,
       stepIndex:this.currentIndex,steps:RUN_STEPS.map((s,i)=>({id:s.direction?`range-${s.direction}`:s.phase,label:labels[i],status:this.completedSteps.has(i)?'complete':i===this.currentIndex&&['running','paused'].includes(this.status)?'current':'pending'}))};
   }

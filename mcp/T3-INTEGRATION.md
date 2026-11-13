@@ -26,6 +26,14 @@ before Apply. The preview is not a prediction of the physical LED's appearance.
 
 ## Local service and privacy
 
+Results show left/right starting deadzones, observed quiet peaks, circularity and
+round-to-round spread. Select a 1/3/5-round goal and explicitly press Repeat check
+for each additional round; no physical session starts automatically. A new
+comparison or disconnect clears the live comparison, while saved session logs
+remain available to the generic `compare_sessions` tool. The card keeps up to ten
+rounds per comparison. Lightbar Apply works before a test when input is fresh;
+the adjacent message explains when connection or a pending command prevents it.
+
 The service binds only to loopback port 27892. State, control and metrics require
 a random capability. Generated HTML and service state under `.runtime` contain
 that capability and stay private. No runtime HTML, logs, device identifiers or

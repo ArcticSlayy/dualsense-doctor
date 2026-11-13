@@ -2,6 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCoachServer, CoachHost, batteryFromReport } from '../coach-host.js';
 
+function savedRound(id,peak=2) {
+  return {id,complete:true,controller:{productId:3302,path:'fixture'},captures:['rest','range','release','buttons','verify'].map((phase,i)=>({number:i+1,phase,metrics:{valid:true,mode:'usb',samples:250,durationMs:5000,maxGapMs:20,left:{valid:true,peakRadiusPercent:peak,p99RadiusPercent:peak},right:{valid:true,peakRadiusPercent:peak,p99RadiusPercent:peak}}}))};
+}
+test('completed rounds accumulate conservatively without automatically starting another run',async()=>{
+  const host=new CoachHost({});host.roundTarget=5;
+  for(let i=0;i<5;i++)host.rememberRound(savedRound('round-'+i,2+i/2));
+  host.rememberRound(savedRound('round-4',1));
+  host.rememberRound({...savedRound('incomplete'),complete:false});
+  const view=host.snapshot().measurements;
+  assert.equal(view.targetRounds,5);assert.equal(view.rounds.length,5);assert.equal(view.comparison.acceptedRounds,5);
+  assert.equal(view.comparison.left.suggestedDeadzonePercent,5);assert.equal(host.run,null);assert.equal(host.status,'idle');
+  assert.doesNotMatch(JSON.stringify(view),/fixture|round-4/);
+  host.status='running';await assert.rejects(host.control('reset_rounds'),/Stop/);
+  host.status='complete';await host.control('reset_rounds');assert.equal(host.snapshot().measurements.rounds.length,0);
+});
+test('round targets validate before measurement and disconnect clears cross-device comparisons',async()=>{
+  const host=new CoachHost({});await assert.rejects(host.control('start',{roundTarget:2}),/1, 3, or 5/);
+  host.rememberRound(savedRound('one'));host.disconnect();
+  assert.equal(host.snapshot().measurements.comparison.acceptedRounds,0);assert.equal(host.run,null);
+});
+
 test('preparation, phase progress and current corrections remain distinct in snapshots',()=>{
   const host=new CoachHost({});host.status='running';
   host.event({type:'instruction',phase:'range',direction:'clockwise',countdownSeconds:3,message:'Clockwise'});
