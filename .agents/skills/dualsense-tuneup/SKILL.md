@@ -69,3 +69,14 @@ before other controls or calibration. It is optional and never a baseline substi
 The view FPS tooltip measures fresh animation callbacks, gaps and synchronous JS
 work. Hidden/stale periods are excluded. These values do not establish paint/GPU
 performance, dropped frames or end-to-end input latency.
+
+
+Use the directional tuning assessment in session reports and the card to explain
+signed rest X/Y, quiet spread and observed axis reach separately. The live assessment
+is the latest completed round, while the deadzone comparison remains conservative
+across accepted rounds. Old records can lack axis evidence; never fill it with zero.
+A directional quiet offset calls for a repeatability check after release, not an
+automatic trial. Raw endpoints can saturate, and circle extrema are not proof of
+straight-direction holds or ideal range. Keep the existing review, trial, retest,
+Save and restart gates intact. Do not turn these observations into firmware-word
+adjustments or a promise of zero drift. See mcp/DIAGNOSTICS.md for normalization.
