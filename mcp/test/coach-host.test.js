@@ -83,3 +83,23 @@ test('live relay requires a capability for state/control and does not accept cal
     const preflight=await fetch(base+'/control',{method:'OPTIONS'});assert.equal(preflight.status,204);
   } finally {await app.close();}
 });
+
+test('live relay streams complete snapshots and closes its feed without hardware',async()=>{
+  let snapshots=0,disconnects=0;
+  const host={snapshot(){return {connected:false,sequence:++snapshots,calibration:{stage:'unknown'}};},disconnect(){disconnects++;}};
+  const app=createCoachServer({host,port:0,token:'a'.repeat(64)}),addr=await app.listen();
+  const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),2000);
+  let closed=false;
+  try {
+    const response=await fetch(`http://127.0.0.1:${addr.port}/events?token=${app.token}`,{signal:abort.signal});
+    assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'text/event-stream');
+    const reader=response.body.getReader(),decoder=new TextDecoder();let received='';
+    while((received.match(/event: state\n/g)||[]).length<2){const {value,done}=await reader.read();assert.equal(done,false);received+=decoder.decode(value,{stream:true});}
+    const states=received.split('\n').filter(line=>line.startsWith('data: ')).map(line=>JSON.parse(line.slice(6)));
+    assert.ok(states.length>=2);assert.equal(states[0].sequence,1);assert.ok(states[1].sequence>1);
+    assert.ok(states.every(state=>state.calibration.stage==='unknown'));
+    await app.close();closed=true;
+    while(!(await reader.read()).done){}
+    assert.equal(disconnects,1);
+  } finally {clearTimeout(timeout);abort.abort();if(!closed)await app.close();}
+});

@@ -7,6 +7,7 @@ import { compareSessionReports } from './session-comparison.js';
 import { join } from 'node:path';
 import { CalibrationWorkflow } from './calibration-workflow.js';
 import { runCalibrationWorker } from './calibration-worker.js';
+import { startFeedClock } from './feed-clock.js';
 
 // Sony's battery nibble reports 10% intervals; use midpoint estimates except full.
 export function batteryFromReport(buf,mode) {
@@ -286,8 +287,7 @@ export function createCoachServer({host=new CoachHost(),port=27892,token=randomB
     }
     res.writeHead(404);res.end(JSON.stringify({error:'Not found'}));
   });
-  const timer=setInterval(()=>{if(!clients.size)return;const data=`event: state\ndata: ${JSON.stringify(host.snapshot())}\n\n`;for(const res of clients){if(res.writableLength>65536){clients.delete(res);res.end();}else res.write(data);}},8);
-  timer.unref();
-  server.on('close',()=>{clearInterval(timer);host.disconnect();for(const c of clients)c.end();});
+  const stopFeed=startFeedClock(()=>{if(!clients.size)return;const data=`event: state\ndata: ${JSON.stringify(host.snapshot())}\n\n`;for(const res of clients){if(res.writableLength>65536){clients.delete(res);res.end();}else res.write(data);}});
+  server.on('close',()=>{stopFeed();host.disconnect();for(const c of clients)c.end();});
   return {server,host,token,port,listen:()=>new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',()=>resolve(server.address()));}),close:()=>new Promise(resolve=>{for(const c of clients)c.end();server.close(resolve);})};
 }
