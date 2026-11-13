@@ -11,6 +11,7 @@ import { runCalibrationWorker } from './calibration-worker.js';
 import { startFeedClock } from './feed-clock.js';
 import { readSessionHistory } from './session-insights.js';
 import { TriggerCheck } from './trigger-check.js';
+import { assessStickTuning } from './stick-tuning.js';
 
 // Sony's battery nibble reports 10% intervals; use midpoint estimates except full.
 export function batteryFromReport(buf,mode) {
@@ -153,7 +154,10 @@ export class CoachHost {
     finally{if(hadConnection){try{this.connect({resumeInspection:true});}catch(error){this.calibrationInspectionPending=true;this.warning=this.warning||error.message;}}this.instruction=this.calibrationWorkflow.snapshot().message;this.calibrationOperation=null;}
   }
   refreshMeasurements() {
-    this.measurements={targetRounds:this.roundTarget,comparison:compareSessionReports(this.roundReports),rounds:this.roundReports.map((report,i)=>{
+    // Compute only when the round set changes; fixed explanatory prose stays in
+    // reports rather than being repeated in the high-rate live feed.
+    const {note,...tuning}=assessStickTuning(this.roundReports.at(-1));
+    this.measurements={targetRounds:this.roundTarget,comparison:compareSessionReports(this.roundReports),tuning,rounds:this.roundReports.map((report,i)=>{
       const summary=compareSessionReports([report]);
       return {number:i+1,complete:summary.acceptedRounds===1,...Object.fromEntries(['left','right'].map(side=>[side,{observedPeakPercent:summary[side]?.observedPeakPercent??null,suggestedDeadzonePercent:summary[side]?.suggestedDeadzonePercent??null,circularityPercent:summary[side]?.circularity?.latest??null}]))};
     })};

@@ -89,3 +89,14 @@ test('history rejects mismatched directory identity and returns fixed root error
     const missing=await readSessionHistory({root:join(root,'PRIVATE_MISSING')});assert.deepEqual(missing,{sessions:[],truncated:false,notice:'Saved checks are unavailable.'});
   } finally {await rm(root,{recursive:true,force:true});}
 });
+
+
+test('history includes a numeric directional assessment without inventing legacy quiet detail',()=>{
+ const input=report();input.captures[1].metrics.left.limits={lx:{min:0,max:255},ly:{min:0,max:255}};
+  input.captures[1].metrics.left.circularity.sectorRadii=Array(48).fill(1);
+ const result=projectSessionInsights(input);
+ assert.equal(result.tuning.available,true);assert.equal(result.tuning.sticks.left.range.available,true);
+ assert.equal(result.tuning.sticks.left.range.leftPercent,100);
+ assert.equal(result.tuning.sticks.left.center.available,false);
+ assert.doesNotMatch(JSON.stringify(result.tuning),/PRIVATE_|serial|path|goal|words|logPath/);
+});

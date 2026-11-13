@@ -138,3 +138,14 @@ test('live relay streams complete snapshots and closes its feed without hardware
     assert.equal(disconnects,1);
   } finally {clearTimeout(timeout);abort.abort();if(!closed)await app.close();}
 });
+
+
+test('directional assessment is cached with completed rounds and cleared on disconnect',()=>{
+ const host=new CoachHost({});host.rememberRound(savedRound('directional-round'));
+ const assessment=host.snapshot().measurements.tuning;
+ assert.equal(assessment.available,true);assert.equal(assessment.scope,'current_check');
+ assert.equal(assessment.sticks.left.center.available,false);
+ assert.equal(host.snapshot().measurements.tuning,assessment);
+ host.disconnect();assert.equal(host.snapshot().measurements.tuning.available,false);
+ assert.equal(host.roundReports.length,0);
+});

@@ -2,6 +2,7 @@
 import {opendir, lstat, open} from 'node:fs/promises';
 import {join} from 'node:path';
 import {compareSessionReports} from './session-comparison.js';
+import {assessStickTuning} from './stick-tuning.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MODES=new Set(['usb','bt','bt-compat']);
@@ -54,7 +55,7 @@ export function projectSessionInsights(report) {
   return {id:typeof input.id==='string'&&UUID.test(input.id)?input.id:null,created:iso(input.created),complete:comparable,comparable,transport,
     calibration:{epoch,status,source:'this_app'},
     comparison:{acceptedRounds:comparable?1:0,comparable,left:comparable?sideSummary(summary.left):null,right:comparable?sideSummary(summary.right):null},
-    range:{left:geometry(range,'left'),right:geometry(range,'right')}};
+    range:{left:geometry(range,'left'),right:geometry(range,'right')},tuning:assessStickTuning({...input,complete:input.complete===undefined?true:input.complete})};
 }
 
 /** Explicit-request history reader. Work is bounded: at most 256 root entries,
