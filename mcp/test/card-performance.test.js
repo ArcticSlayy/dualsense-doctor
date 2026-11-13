@@ -5,20 +5,21 @@ import vm from 'node:vm';
 
 const html=readFileSync(new URL('../coach-card.html',import.meta.url),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replaceAll('__API_BASE__','http://127.0.0.1:27892').replaceAll('__TOKEN__','test-token');
-function setup({storedPreferences,blockedStorage=false,controlResponse,deferUi=false,reducedMotion=false}={}){
-  let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],nodes=new Map(),storage=new Map();
+function setup({storedPreferences,blockedStorage=false,controlResponse,controlError,deferUi=false,reducedMotion=false}={}){
+  let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],timeouts=[],nodes=new Map(),storage=new Map(),downloads=[],canvasWrites=[];
+  const drawing={measureText:value=>({width:String(value).length*11}),fillText:(...args)=>canvasWrites.push(args)};for(const method of ['fillRect','beginPath','arc','stroke','moveTo','lineTo','setLineDash','fill'])drawing[method]=()=>{};
   if(storedPreferences)storage.set('dualsense-coach-display',JSON.stringify(storedPreferences));
   for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{textContent:'',attributes:{},writes:[],style:{},dataset:{},disabled:false,hidden:false,value:'',checked:false,listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
   class EventSource{constructor(){this.closed=false;}addEventListener(){}close(){this.closed=true;}}
-  const context=vm.createContext({document:{getElementById:id=>{assert.ok(nodes.has(id),id);return nodes.get(id);}},performance:{now:()=>now},URL,AbortSignal,
+  const context=vm.createContext({document:{createElement:tag=>tag==='canvas'?{getContext:()=>drawing,toDataURL:()=> 'data:image/png;base64,c3ludGhldGlj'}:{click(){downloads.push({href:this.href,download:this.download});}},getElementById:id=>{assert.ok(nodes.has(id),id);return nodes.get(id);}},performance:{now:()=>now},URL,AbortSignal:{timeout:ms=>{timeouts.push(ms);return AbortSignal.timeout(ms);}},
     requestAnimationFrame:fn=>{const id=nextId++;frames.set(id,fn);return id;},cancelAnimationFrame:id=>frames.delete(id),
     setInterval:(fn,ms)=>{const id=nextId++;intervals.set(id,{fn,ms});return id;},clearInterval:id=>intervals.delete(id),
-    EventSource,fetch:(url,options)=>{requests.push({url:String(url),options});if(String(url).includes('/control')&&controlResponse)return Promise.resolve({ok:controlResponse.ok!==false,json:async()=>controlResponse.body??{connected:true,status:'idle'}});return new Promise(()=>{});},
+    EventSource,fetch:(url,options)=>{requests.push({url:String(url),options});if(String(url).includes('/control')&&controlError)return Promise.reject(controlError);if(String(url).includes('/control')&&controlResponse)return Promise.resolve({ok:controlResponse.ok!==false,json:async()=>controlResponse.body??{connected:true,status:'idle'}});return new Promise(()=>{});},
     localStorage:{getItem(key){if(blockedStorage)throw Error('storage blocked');return storage.get(key)??null;},setItem(key,value){if(blockedStorage)throw Error('storage blocked');storage.set(key,String(value));}},
     window:{addEventListener:(name,fn)=>listeners.set(name,fn),matchMedia:()=>({matches:reducedMotion})},console});
   vm.runInContext(script,context);
   const input=(lx=128)=>({connected:true,status:'idle',latest:{lx,ly:128,rx:128,ry:128,mode:'usb'},ageMs:0,instruction:'Move the sticks',progress:0,details:{}});
-  return {context,nodes,frames,intervals,listeners,requests,input,storage,change(id,value){const node=nodes.get(id);assert.ok(node,id);if(typeof value==='boolean')node.checked=value;else node.value=value;node.listeners.get('change')?.({target:node});},click(id){nodes.get(id).listeners.get('click')?.();},accept(s){context.input=s;vm.runInContext("accept(input,'sse')",context);if(!deferUi)vm.runInContext("renderState()",context);},step(ms=16){now+=ms;const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(now);},at(value){now=value;}};
+  return {context,nodes,frames,intervals,listeners,requests,timeouts,input,storage,downloads,canvasWrites,change(id,value){const node=nodes.get(id);assert.ok(node,id);if(typeof value==='boolean')node.checked=value;else node.value=value;node.listeners.get('change')?.({target:node});},click(id){nodes.get(id).listeners.get('click')?.();},accept(s){context.input=s;vm.runInContext("accept(input,'sse')",context);if(!deferUi)vm.runInContext("renderState()",context);},step(ms=16){now+=ms;const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(now);},at(value){now=value;}};
 }
 
 test('multiple feed updates coalesce into one animation-frame plot update',()=>{
@@ -293,4 +294,119 @@ test('new comparison clears only saved comparison state and is blocked during a 
  const run=setup();run.accept({...run.input(),status:'running',measurements:measuredRounds()});run.click('reset-rounds');assert.ok(!run.requests.some(r=>r.url.includes('/control')));
  run.accept({...run.input(),status:'complete',measurements:measuredRounds()});run.click('reset-rounds');
  const request=run.requests.find(r=>r.url.includes('/control'));assert.deepEqual(JSON.parse(request.options.body),{action:'reset_rounds'});
+});
+const calibrationState=(stage='measured',overrides={})=>({stage,message:'Server calibration state: '+stage,reviewId:'review-123',lastSavedAt:null,verifiedAt:null,historySource:'this_app',firmwareSaveTimestamp:null,busy:false,operation:null,countdownSeconds:null,comparison:{before:{left:measuredSide(4,5),right:measuredSide(5,6)},after:{left:measuredSide(2,3),right:measuredSide(3,4)}},actions:{inspect:true,trial:stage==='measured',retest:stage==='trial_applied',save:stage==='ready_to_save',reboot:['trial_applied','ready_to_save','save_acknowledged','verified'].includes(stage),verify:['save_acknowledged','verified','ambiguous','changed'].includes(stage)},...overrides});
+const controlCommands=run=>run.requests.filter(r=>r.url.includes('/control')).map(r=>JSON.parse(r.options.body));
+
+test('calibration stages reflect server evidence and never send an automatic command',()=>{
+ const run=setup();
+ for(const [stage,expected] of [['measured','Measured · unchanged'],['trial_applied','Temporary adjustment · unsaved'],['ready_to_save','Retested · review before saving'],['save_acknowledged','Save acknowledged · restart verification needed'],['verified','Verified after restart'],['ambiguous','Verification inconclusive'],['changed','Calibration changed'],['unknown','Unknown']]){
+  run.accept({...run.input(),status:'complete',calibration:calibrationState(stage)});
+  assert.equal(run.nodes.get('calibration-stage').textContent,expected);
+  assert.equal(run.nodes.get('calibration-message').textContent,'Server calibration state: '+stage);
+  assert.equal(run.nodes.get('calibration-save').disabled,stage!=='ready_to_save');
+  assert.equal(run.nodes.get('calibration-retest').disabled,stage!=='trial_applied');
+  assert.equal(run.nodes.get('calibration-trial').disabled,stage!=='measured');
+ }
+ assert.deepEqual(controlCommands(run),[]);
+});
+
+test('measurement alone cannot unlock Save even if an invalid capability claims it can',()=>{
+ const run=setup();run.accept({...run.input(),status:'complete',calibration:calibrationState('measured',{actions:{save:true}})});
+ run.click('calibration-save');run.click('calibration-confirm-action');
+ assert.equal(run.nodes.get('calibration-save').hidden,true);assert.equal(run.nodes.get('calibration-confirm').hidden,true);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('temporary trial is explicit and its hands-off countdown follows server evidence',()=>{
+ const run=setup();run.accept({...run.input(),calibration:calibrationState()});run.click('calibration-trial');
+ assert.deepEqual(controlCommands(run),[{confirm:'TRY_TEMPORARY_CENTER',action:'calibration_trial'}]);
+ const countdown=setup();countdown.accept({...countdown.input(),latest:null,calibration:calibrationState('measured',{busy:true,operation:'temporary center adjustment',countdownSeconds:3})});
+ assert.match(countdown.nodes.get('calibration-message').textContent,/Hands off both sticks · 3s/);
+ countdown.step(3500);assert.match(countdown.nodes.get('calibration-stage').textContent,/Measured/);assert.deepEqual(controlCommands(countdown),[]);
+});
+
+test('save requires inline review confirmation and sends the server reviewId once',()=>{
+ const run=setup();run.accept({...run.input(),status:'complete',calibration:calibrationState('ready_to_save')});run.click('calibration-save');
+ assert.deepEqual(controlCommands(run),[]);assert.equal(run.nodes.get('calibration-confirm').hidden,false);
+ assert.match(run.nodes.get('calibration-confirm-title').textContent,/controller memory/);
+ assert.match(run.nodes.get('calibration-confirm-results').textContent,/Left: before resting peak 4%.*after resting peak 2%/);
+ run.click('calibration-confirm-action');run.click('calibration-confirm-action');
+ assert.deepEqual(controlCommands(run),[{confirm:'SAVE_REVIEWED_CALIBRATION',reviewId:'review-123',action:'calibration_save'}]);
+ assert.equal(run.nodes.get('calibration-confirm').hidden,true);
+});
+
+test('save confirmation cancels safely and expires when the reviewed candidate changes',()=>{
+ const run=setup(),input={...run.input(),calibration:calibrationState('ready_to_save')};run.accept(input);run.click('calibration-save');run.click('calibration-cancel');run.click('calibration-confirm-action');
+ assert.deepEqual(controlCommands(run),[]);
+ run.click('calibration-save');run.accept({...input,calibration:calibrationState('ready_to_save',{reviewId:'replacement-review'})});
+ assert.equal(run.nodes.get('calibration-confirm').hidden,true);run.click('calibration-confirm-action');assert.deepEqual(controlCommands(run),[]);
+ const missing=setup();missing.accept({...missing.input(),calibration:calibrationState('ready_to_save',{reviewId:null})});missing.click('calibration-save');assert.equal(missing.nodes.get('calibration-save').disabled,true);assert.deepEqual(controlCommands(missing),[]);
+});
+
+test('restart explicitly confirms discarding a temporary adjustment; a saved restart does not send discard',()=>{
+ for(const stage of ['trial_applied','ready_to_save','save_acknowledged']){
+  const run=setup();run.accept({...run.input(),calibration:calibrationState(stage)});run.click('calibration-reboot');
+  assert.deepEqual(controlCommands(run),[]);assert.equal(run.nodes.get('calibration-confirm').hidden,false);
+  const unsaved=stage!=='save_acknowledged';if(unsaved)assert.match(run.nodes.get('calibration-confirm-title').textContent,/discard the unsaved/);
+  run.click('calibration-confirm-action');assert.deepEqual(controlCommands(run),[{confirm:'REBOOT_CONTROLLER',...(unsaved?{discardUnsaved:true}:{}),action:'calibration_reboot'}]);
+ }
+ assert.doesNotMatch(script,/\b(?:alert|confirm)\(/);
+});
+
+test('inspection and explicit restart verification use capabilities even while input is stale',()=>{
+ for(const [id,payload] of [['inspect',{action:'calibration_inspect'}],['verify',{restartConfirmed:true,action:'calibration_verify'}],['retest',{action:'calibration_retest'}]]){
+  const run=setup();run.accept({...run.input(),connected:false,latest:null,ageMs:null,calibration:calibrationState(id==='retest'?'trial_applied':'save_acknowledged')});
+  assert.equal(run.nodes.get('calibration-'+id).disabled,false);run.click('calibration-'+id);assert.deepEqual(controlCommands(run),[payload]);
+ }
+ assert.match(html,/>I restarted — verify</);
+});
+
+test('saved and verified timestamps come only from app records, never from firmware build date',()=>{
+ const run=setup(),saved='2026-11-01T15:00:00Z',verified='2026-11-02T15:00:00Z';
+ run.accept({...run.input(),firmware:{build:'FIRMWARE BUILD 2024-04-22'},calibration:calibrationState('save_acknowledged',{lastSavedAt:saved,verifiedAt:null})});
+ assert.equal(run.nodes.get('calibration-saved-at').textContent,new Date(saved).toLocaleString());assert.equal(run.nodes.get('calibration-verified-at').textContent,'Not verified');
+ run.accept({...run.input(),calibration:calibrationState('verified',{lastSavedAt:saved,verifiedAt:verified})});assert.equal(run.nodes.get('calibration-verified-at').textContent,new Date(verified).toLocaleString());
+ run.accept({...run.input(),firmware:{build:'FIRMWARE BUILD 2024-04-22'},calibration:calibrationState('unknown',{firmwareSaveTimestamp:'2024-04-22T00:00:00Z'})});assert.equal(run.nodes.get('calibration-saved-at').textContent,'No app save recorded');
+ assert.match(html,/Last saved by this app/);assert.match(html,/No firmware save timestamp is available here/);
+});
+
+test('busy calibration reserves HID without racing generic commands or offering Connect as recovery',()=>{
+ const run=setup();run.accept({...run.input(),connected:false,latest:null,calibration:calibrationState('trial_applied',{busy:true,operation:'center adjustment',blockedReason:'Keep hands off until the center adjustment finishes.'})});
+ for(const id of ['start','repeat-round','reset-rounds','lightbar-apply','trigger-apply','trigger-reset','connect','lightbar-connect']){assert.equal(run.nodes.get(id).disabled,true,id);run.click(id);}
+ assert.equal(run.nodes.get('connect').hidden,true);assert.equal(run.nodes.get('lightbar-connect').hidden,true);assert.match(run.nodes.get('connection').textContent,/controller reserved/);assert.deepEqual(controlCommands(run),[]);
+ assert.equal(run.nodes.get('calibration-retest').attributes.title,'Keep hands off until the center adjustment finishes.');
+ run.accept({...run.input(),calibration:calibrationState('trial_applied')});assert.equal(run.nodes.get('start').disabled,true);assert.equal(run.nodes.get('start').hidden,true);assert.equal(run.nodes.get('connect').hidden,false);
+});
+
+test('old hosts and partial comparison data remain honest and usable',()=>{
+ const run=setup();run.accept(run.input());assert.match(run.nodes.get('calibration-help').textContent,/updated local coach/);assert.equal(run.nodes.get('start').disabled,false);assert.equal(run.nodes.get('calibration-inspect').disabled,true);
+ run.accept({...run.input(),calibration:calibrationState('ambiguous',{comparison:{before:{left:{}},after:null},actions:{save:false,inspect:false},blockedReason:'No compatible calibration history for this controller.'})});
+ assert.match(run.nodes.get('calibration-left').textContent,/Unavailable/);assert.match(run.nodes.get('calibration-right').textContent,/Unavailable/);assert.equal(run.nodes.get('calibration-help').textContent,'No compatible calibration history for this controller.');assert.deepEqual(controlCommands(run),[]);
+});
+
+
+test('calibration requests allow a long operation and a timeout waits for server evidence without retrying',async()=>{
+ const error=new Error('synthetic timeout');error.name='TimeoutError';
+ const run=setup({controlError:error});run.accept({...run.input(),calibration:calibrationState()});run.click('calibration-trial');
+ assert.ok(run.timeouts.includes(60000));await new Promise(r=>setImmediate(r));
+ assert.match(run.nodes.get('feedback').textContent,/operation may still be running/);assert.equal(run.nodes.get('connect').hidden,true);assert.equal(run.nodes.get('start').disabled,true);assert.equal(run.nodes.get('calibration-trial').disabled,true);assert.equal(controlCommands(run).length,1);
+ run.step(1000);assert.equal(controlCommands(run).length,1);
+ run.accept({...run.input(),calibration:calibrationState('trial_applied')});assert.equal(run.nodes.get('calibration-retest').disabled,false);assert.equal(run.nodes.get('connect').hidden,false);assert.equal(controlCommands(run).length,1);
+ const ordinary=setup();ordinary.accept(ordinary.input());ordinary.click('lightbar-apply');assert.ok(ordinary.timeouts.includes(8000));
+});
+
+
+test('snapshot export is explicit, display-only, and creates a PNG download with an inline fallback',()=>{
+ const run=setup();run.accept({...run.input(140),status:'complete',measurements:measuredRounds(),calibration:calibrationState('ready_to_save')});
+ assert.equal(run.downloads.length,0);run.click('snapshot');
+ assert.deepEqual(controlCommands(run),[]);assert.equal(run.downloads.length,1);assert.equal(run.downloads[0].download,'DualSense-Studio-Snapshot.png');assert.match(run.downloads[0].href,/^data:image\/png/);assert.equal(run.nodes.get('snapshot-preview').hidden,false);assert.match(run.nodes.get('snapshot-status').textContent,/if your browser blocks it/);assert.equal(run.nodes.get('snapshot-open').attributes.href,run.downloads[0].href);
+ assert.ok(run.canvasWrites.some(([value])=>value==='Calibration: Retested · review before saving'));assert.ok(run.canvasWrites.some(([value])=>/Raw X 140/.test(value)));
+ run.click('snapshot-close');assert.equal(run.nodes.get('snapshot-preview').hidden,true);
+});
+
+test('snapshot report excludes private state, URLs, session paths, serial numbers and arbitrary messages',()=>{
+ const run=setup(),s=run.input();Object.assign(s,{sessionId:'PRIVATE_SESSION',token:'PRIVATE_TOKEN',url:'https://PRIVATE_URL/',instruction:'PRIVATE_INSTRUCTION',path:'/private/PRIVATE_PATH',controller:{serialNumber:'PRIVATE_SERIAL'},firmware:{build:'PRIVATE_BUILD'},calibration:calibrationState('verified',{message:'PRIVATE_CALIBRATION_MESSAGE',lastSavedAt:'PRIVATE_DATE',reviewId:'PRIVATE_REVIEW'})});
+ run.accept(s);run.click('snapshot');const rendered=run.canvasWrites.map(([value])=>value).join(' ');
+ assert.doesNotMatch(rendered,/PRIVATE_|test-token|127\.0\.0\.1|https?:|\/private\/|review-123/);assert.match(rendered,/Verified after restart/);assert.deepEqual(controlCommands(run),[]);
+ run.step(301);run.click('snapshot');assert.ok(run.canvasWrites.some(([value])=>/Last received input, stale/.test(value)));
 });
