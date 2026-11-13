@@ -3,6 +3,7 @@
 // (dsdoctor.py, js/*.js). node-hid input data INCLUDES the report id at buf[0], so
 // stick offsets follow the Python parser (not the report-id-stripped WebHID one).
 import HID from 'node-hid';
+import { acquireLease } from './lease.js';
 
 export const SONY_VID = 0x054c;
 export const DUALSENSE_PIDS = [0x0ce6, 0x0df2]; // DualSense, DualSense Edge
@@ -148,10 +149,11 @@ export class Controller {
       if (!found) throw new Error('Selected controller is no longer connected. List controllers again.');
       this.info = found;
     }
+    this._releaseLease=acquireLease();
     try { this.dev = new HID.HID(this.info.path); }
-    catch (e) { throw new Error(`Could not open controller: ${e.message}. On Linux add a hidraw udev rule; on macOS grant Input Monitoring.`); }
+    catch (e) { this._releaseLease();this._releaseLease=null;throw new Error(`Could not open controller: ${e.message}. On Linux add a hidraw udev rule; on macOS grant Input Monitoring.`); }
   }
-  close() { try { this.dev?.close(); } catch {} this.dev = null;this._lightbarReady=false;this._mode=null; }
+  close() { try { this.dev?.close(); } catch {} this.dev = null;this._releaseLease?.();this._releaseLease=null;this._lightbarReady=false;this._mode=null; }
 
   _readOnce(timeoutMs = 400) {
     const buf = this.dev.readTimeout(timeoutMs);
