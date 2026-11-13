@@ -307,9 +307,9 @@ const measuredRounds=()=>({targetRounds:5,rounds:Array.from({length:5},(_,i)=>({
 test('complete repeat measurements show conservative server candidates and a round comparison',()=>{
  const run=setup();run.accept({...run.input(),status:'complete',measurements:measuredRounds()});
  assert.equal(run.nodes.get('results').hidden,false);assert.equal(run.nodes.get('left-deadzone').textContent,'7%');assert.equal(run.nodes.get('right-deadzone').textContent,'8%');
- assert.match(run.nodes.get('left-circularity').textContent,/7.5%/);assert.match(run.nodes.get('round-status').textContent,/5 of 5 compatible/);
+ assert.match(run.nodes.get('left-circularity').textContent,/7.5%/);assert.match(run.nodes.get('round-status').textContent,/5 checks recorded.*goal met/);
  assert.equal(run.nodes.get('round-history').hidden,false);assert.equal(run.nodes.get('round-4-left').textContent,'7%');assert.equal(run.nodes.get('round-5').hidden,true);
- assert.equal(run.nodes.get('round-4-right-bar').style.width,'100%');assert.match(run.nodes.get('results-note').textContent,/not values applied by this app/);
+ assert.equal(run.nodes.get('round-4-right-bar').style.width,'100%');assert.match(run.nodes.get('results-note').textContent,/nothing here applies them in your game/);
  assert.ok(!run.requests.some(r=>r.url.includes('/control')));
 });
 
@@ -635,8 +635,8 @@ test('hands-off phases dominate the instruction and never infer completion from 
 test('latest near-center result explains game guidance and does not encourage another trial',()=>{
  const run=setup(),data=measuredRounds();data.latestComparison={comparable:true,acceptedRounds:1,left:measuredSide(.79,2),right:measuredSide(.79,2)};data.comparison={...data.latestComparison};data.seriesReset=true;
  run.accept({...run.input(),status:'complete',measurements:data,calibration:calibrationState('measured',{comparison:{before:data.latestComparison,after:null}})});
- assert.match(run.nodes.get('results-summary').textContent,/left 0.79%.*right 0.79%/);assert.match(run.nodes.get('results-next').textContent,/keep the current calibration/);
- assert.match(run.nodes.get('comparison-explainer').textContent,/fresh comparison.*Earlier checks remain saved/);
+ assert.match(run.nodes.get('results-summary').textContent,/left 0.79%.*right 0.79%/);assert.match(run.nodes.get('results-next').textContent,/Keep the current calibration/);
+ assert.match(run.nodes.get('comparison-explainer').textContent,/fresh comparison.*Earlier reports remain saved/);
  assert.notEqual(run.nodes.get('calibration-trial').attributes.class,'primary');assert.equal(run.nodes.get('calibration-comparison').hidden,true);assert.deepEqual(controlCommands(run),[]);
  assert.ok(html.indexOf('id="results"')<html.indexOf('id="calibration"'));assert.ok(html.indexOf('id="calibration"')<html.indexOf('class="live-panel"'));
  assert.equal(run.nodes.get('start').hidden,true);assert.equal(run.nodes.get('round-options').hidden,false);assert.equal(run.nodes.get('guidance-panel').dataset.complete,'true');
@@ -677,11 +677,44 @@ test('rejected latest evidence keeps earlier accepted values separate and compar
  const run=setup(),side=measuredSide(8,9),comparison={comparable:true,acceptedRounds:1,left:side,right:side};
  run.accept({...run.input(),status:'complete',measurements:{comparison,latestComparison:{comparable:false,acceptedRounds:0},rounds:Array.from({length:10},(_,i)=>({number:i+1,complete:true,left:side,right:side}))}});
  assert.equal(run.nodes.get('results').hidden,false);assert.match(run.nodes.get('results-title').textContent,/Earlier accepted.*latest result unavailable/);assert.match(run.nodes.get('left-observed').textContent,/Earlier accepted.*Latest check excluded/);assert.equal(run.nodes.get('left-deadzone').textContent,'9%');
- const compare=html.slice(html.indexOf('<details class="comparison-options"'),html.indexOf('<section class="calibration"'));assert.match(compare,/id="reset-rounds"/);assert.equal(run.nodes.get('reset-rounds').disabled,false);run.click('reset-rounds');assert.equal(controlCommands(run)[0].action,'reset_rounds');
+ const compare=html.slice(html.indexOf('<details class="comparison-options"'),html.indexOf('<details class="calibration"'));assert.match(compare,/id="reset-rounds"/);assert.equal(run.nodes.get('reset-rounds').disabled,false);run.click('reset-rounds');assert.equal(controlCommands(run)[0].action,'reset_rounds');
 });
 
 test('save confirmation stays outside views and repeated checks are hidden while a trial needs review',()=>{
  const run=setup(),s={...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState('ready_to_save')};run.accept(s);
  assert.equal(run.nodes.get('repeat-round').hidden,true);run.click('calibration-save');run.click('nav-controller');assert.equal(run.nodes.get('calibration-confirm').hidden,false);assert.equal(run.nodes.get('studio').dataset.view,'controller');
  assert.ok(html.indexOf('id="calibration-confirm"')<html.indexOf('class="view-nav"'));assert.deepEqual(controlCommands(run),[]);
+});
+
+
+test('a repeat goal counts full checks and choosing three never starts or resets a recording',()=>{
+ const run=setup(),data=measuredRounds();data.targetRounds=1;data.comparison.acceptedRounds=1;data.rounds=data.rounds.slice(0,1);
+ run.accept({...run.input(),status:'complete',measurements:data,calibration:calibrationState('measured')});
+ run.change('round-target','3');assert.match(run.nodes.get('round-status').textContent,/1 of 3.*2 remaining/);assert.match(run.nodes.get('comparison-explainer').textContent,/2 checks remain.*when you choose/);assert.deepEqual(controlCommands(run),[]);
+ run.accept({...run.input(),status:'complete',measurements:data,calibration:calibrationState('measured')});assert.equal(run.nodes.get('round-target').value,'3');
+ run.click('repeat-round');assert.deepEqual(controlCommands(run),[{roundTarget:3,action:'start'}]);
+});
+
+test('lowering a comparison goal keeps recorded evidence and avoids three-of-one copy',()=>{
+ const run=setup(),data=measuredRounds();data.comparison.acceptedRounds=3;data.rounds=data.rounds.slice(0,3);run.accept({...run.input(),status:'complete',measurements:data});run.change('round-target','1');
+ assert.match(run.nodes.get('round-status').textContent,/3 checks recorded.*goal met/);assert.doesNotMatch(run.nodes.get('round-status').textContent,/3 of 1/);assert.match(run.nodes.get('comparison-explainer').textContent,/You can stop here/);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('game-deadzone help distinguishes a conservative suggestion from controller calibration',()=>{
+ const run=setup();run.accept({...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState('measured')});
+ assert.match(run.nodes.get('results-note').textContent,/not required minimums.*lower setting if it is stable.*manually/);
+ assert.match(run.nodes.get('deadzone-calculation').textContent,/resting movement.*1 percentage point.*rounded up/);
+ assert.match(html,/0% is an option to test, not a calibration target/);assert.match(html,/reports are recorded on this computer automatically/);assert.match(html,/Changing this choice starts nothing/);
+ assert.deepEqual(controlCommands(run),[]);
+});
+
+
+test('optional calibration stays collapsed while pending or uncertain workflows expose review',()=>{
+ const run=setup(),s={...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState('measured')};run.accept(s);
+ assert.equal(run.nodes.get('calibration').open,false);run.nodes.get('calibration').open=true;run.accept({...s});assert.equal(run.nodes.get('calibration').open,true);
+ for(const stage of ['trial_applied','ready_to_save','save_acknowledged','ambiguous','changed']){
+  run.nodes.get('calibration').open=false;run.accept({...s,calibration:calibrationState(stage)});assert.equal(run.nodes.get('calibration').open,true,stage);assert.equal(run.nodes.get('calibration-toggle').hidden,true,stage);
+ }
+ run.accept({...s,calibration:calibrationState('verified')});assert.equal(run.nodes.get('calibration').open,false);
+ run.context.uncertain=true;vm.runInContext('calibrationRequestUncertain=true;calibrationView()',run.context);assert.equal(run.nodes.get('calibration').open,true);assert.match(run.nodes.get('calibration-toggle').textContent,/needs attention/);assert.deepEqual(controlCommands(run),[]);
 });
