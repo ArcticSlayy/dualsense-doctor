@@ -148,9 +148,11 @@ test('failed read-only review restores live input and does not manufacture revie
 
 test('reconnection hides previous controller verification until an explicit inspection',async()=>{
   const f=fixture({stage:'verified'});f.state.lastSavedAt='2026-01-01T00:00:00.000Z';f.state.verifiedAt='2026-01-02T00:00:00.000Z';
+  f.state.diagnostics={available:true,sticks:{left:{rows:[{id:'quiet_peak',after:2}]}}};
   assert.equal(f.host.calibrationState().stage,'verified');
   f.host.disconnect();f.host.connect();f.host.c.info.path='another-controller';
   const view=f.host.calibrationState();assert.equal(view.stage,'unknown');assert.equal(view.lastSavedAt,null);assert.equal(view.verifiedAt,null);assert.equal(view.inspectionNeeded,true);
+  assert.equal(view.diagnostics,null);
   assert.equal(view.actions.save,false);assert.equal(view.actions.verify,false);assert.equal(view.actions.inspect,true);
   assert.equal(f.inputs.length,0,'reconnection must not send commands');
 });
@@ -160,4 +162,16 @@ test('a completed baseline cannot be reused for a trial after disconnecting',asy
   f.host.disconnect();f.host.connect();await f.host.control('calibration_inspect');
   assert.equal(f.host.result,null);assert.equal(f.host.calibrationState().actions.trial,false);
   assert.deepEqual(f.inputs.map(i=>i.operation),['inspect']);assert.ok(!f.events.includes('workflow:measured'));
+});
+
+test('interrupted trial keeps its restart requirement but hides old-controller diagnostics after reconnection',async()=>{
+  const f=fixture({stage:'ambiguous',trialSession:sessionId,needsRestart:true});
+  f.state.comparison={before:{left:{observedPeakPercent:4}},after:null};
+  f.state.diagnostics={available:true,sticks:{left:{rows:[{id:'quiet_peak',before:4,after:null}]}}};
+  f.state.lastSavedAt='2026-01-01T00:00:00.000Z';
+  f.host.disconnect();f.host.connect();f.host.c.info.path='another-controller';
+  const view=f.host.calibrationState();assert.equal(view.stage,'ambiguous');assert.equal(view.inspectionNeeded,true);
+  assert.equal(f.host.calibrationRequiresRestart,true);assert.match(view.blockedReason,/Restart/);
+  assert.equal(view.comparison,null);assert.equal(view.diagnostics,null);assert.equal(view.lastSavedAt,null);
+  assert.equal(view.actions.trial,false);assert.equal(view.actions.save,false);assert.deepEqual(f.inputs,[]);
 });

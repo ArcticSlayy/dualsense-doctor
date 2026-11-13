@@ -254,3 +254,15 @@ test('interrupted trial recovery requires the same controller, locked mode and o
   }
   flow.resolveInterruptedTrial(snap(),true);assert.equal(flow.needsRestart(),false);assert.equal(flow.getTrialSessionId(),null);
 });
+
+test('review diagnostics describe independent metrics without changing save authorization',t=>{
+  const {flow,after,ready}=setup(t);const state=ready(),reviewId=state.reviewId;
+  const diagnostics=state.diagnostics;assert.equal(diagnostics.available,true);assert.equal(diagnostics.complete,true);
+  const rows=diagnostics.sticks.left.rows;
+  assert.equal(rows.find(r=>r.id==='quiet_peak').delta,-1);assert.equal(rows.find(r=>r.id==='circularity').delta,0);
+  assert.equal(rows.find(r=>r.id==='symmetry').delta,0);assert.equal(rows.find(r=>r.id==='release_peak').after,20);
+  assert.doesNotMatch(JSON.stringify(diagnostics),/factory-private|private-path|enumeration-id|session-one/);
+  rows[0].after=999;state.comparison.after.left.observedPeakPercent=999;
+  assert.equal(flow.snapshot().diagnostics.sticks.left.rows[0].after,2);
+  assert.deepEqual(flow.assertSave({reviewId,report:after,snapshot:snap(1)}).expectedWords,snap(1).words);
+});

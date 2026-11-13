@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync,
 import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { compareSessionReports } from './session-comparison.js';
+import { calibrationDiagnostics } from './calibration-diagnostics.js';
 
 const LOCKED='locked(temporary)', TTL=10*60*1000;
 const copy=value=>structuredClone(value);
@@ -90,6 +91,7 @@ function replaceDurably(directory,file,state) {
 
 export class CalibrationWorkflow {
   #directory; #file; #clock; #state=fresh(); #observed=null; #fault=false;
+  #diagnosticsInput; #diagnosticsValue;
   constructor(directory,{clock=()=>Date.now()}={}) {
     if(typeof directory!=='string'||!directory.trim())throw Error('A private journal directory is required.');
     if(typeof clock!=='function')throw Error('A clock function is required.');
@@ -268,6 +270,8 @@ export class CalibrationWorkflow {
     let stage=this.#fault?'ambiguous':active&&!(current.stage==='changed'&&matches)?current.stage:matches?receipt.status:receipt?'changed':'unknown';
     if(stage==='pending'||this.needsRestart())stage='ambiguous';
     const review=active&&current.review;
+    const comparison=active?current.comparison??null:matches?receipt.comparison??null:null;
+    if(comparison!==this.#diagnosticsInput){this.#diagnosticsInput=comparison;this.#diagnosticsValue=calibrationDiagnostics(comparison);}
     if(stage==='ready_to_save'&&(!review||this.#now()>=review.expiresAt||this.#now()<review.createdAt))stage='trial_applied';
     const messages={unknown:'No calibration save history from this app is known for this controller.',measured:'Baseline checked. A temporary center adjustment can be tested next.',
       trial_applied:'Temporary center adjustment recorded. Complete a new check before reviewing a save.',ready_to_save:'Review these before and after measurements before saving the exact tested candidate.',
@@ -275,6 +279,6 @@ export class CalibrationWorkflow {
       ambiguous:'Save history is uncertain. Inspect the controller and local history; do not automatically repeat a save.',changed:'Controller identity, calibration words or mode changed. A fresh trial and review are required.'};
     return {stage,message:this.needsRestart()?'A temporary center adjustment may have been interrupted. Confirm a real controller restart before another trial or save.':messages[stage]??messages.unknown,reviewId:stage==='ready_to_save'?review.id:null,
       lastSavedAt:acknowledged?.acknowledgedAt??null,verifiedAt:matches?receipt.verifiedAt:null,
-      historySource:'this_app',firmwareSaveTimestamp:null,comparison:copy(active?current.comparison??null:matches?receipt.comparison??null:null)};
+      historySource:'this_app',firmwareSaveTimestamp:null,comparison:copy(comparison),diagnostics:copy(this.#diagnosticsValue)};
   }
 }

@@ -30,7 +30,10 @@ export class CoachHost {
   }
   calibrationState() {
     let state=this.calibrationWorkflow?.snapshot()??{stage:'unknown',message:'Calibration workflow is unavailable.',lastSavedAt:null,verifiedAt:null,firmwareSaveTimestamp:null,historySource:'this_app'};
-    if(this.calibrationInspectionPending&&!this.calibrationRequiresRestart)state={...state,stage:'unknown',message:'Inspect calibration history for this connection before using saved status.',lastSavedAt:null,verifiedAt:null,reviewId:null,comparison:null};
+    if(this.calibrationInspectionPending){
+      state={...state,lastSavedAt:null,verifiedAt:null,reviewId:null,comparison:null,diagnostics:null};
+      if(!this.calibrationRequiresRestart)state={...state,stage:'unknown',message:'Inspect calibration history for this connection before using saved status.'};
+    }
     const busy=!!this.calibrationOperation,idle=!busy&&!this.run&&!['running','paused'].includes(this.status);
     const fresh=!!this.c&&!!this.latest&&performance.now()-this.lastAt<300;
     const standard=fresh&&this.latest.mode==='usb'&&this.c.info.productId===0x0ce6;
