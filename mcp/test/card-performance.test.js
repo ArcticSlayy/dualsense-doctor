@@ -132,10 +132,10 @@ test('focus, center rings, units and performance options change display without 
  assert.equal(run.nodes.get('rates').hidden,true);assert.equal(run.nodes.get('left-values').textContent,'X 240   Y 3');
  assert.equal(s.latest.lx,240);assert.equal(s.latest.ly,3);
 });
-test('trigger bars and held button counts use actual input and neutralize on stale input',()=>{
+test('trigger bars and named button presses use actual input and neutralize on stale input',()=>{
  const run=setup(),s=run.input();s.latest.l2=255;s.latest.r2=128;s.latest.buttons=0b100001;
  run.accept(s);run.step();assert.equal(run.nodes.get('l2-fill').style.width,'100%');assert.equal(run.nodes.get('r2-fill').style.width,'50%');
- assert.equal(run.nodes.get('button-count').textContent,'2 held');
+ assert.equal(run.nodes.get('button-count').textContent,'Square + R1');
  run.step(301);assert.equal(run.nodes.get('l2-fill').style.width,'0%');assert.equal(run.nodes.get('button-count').textContent,'—');
 });
 test('only whitelisted display preferences persist and blocked storage is harmless',()=>{
@@ -268,7 +268,7 @@ test('reduced motion countdown uses discrete ring steps',()=>{
 
 
 test('all customization options share one disclosure with named groups',()=>{
- assert.equal([...html.matchAll(/<details\b/g)].length,1);
+ assert.equal([...html.matchAll(/<details\b[^>]*id="controller-controls"/g)].length,1);
  const panel=html.match(/<details\b[^>]*id="controller-controls"[\s\S]*?<\/details>/)[0];
  for(const id of ['trail-mode','view-mode','number-units','center-rings','show-rates','clear-trail','lightbar-hex','lightbar-apply','trigger-preset','trigger-apply'])assert.ok(panel.includes('id="'+id+'"'),id);
  assert.match(panel,/Live view/);assert.match(panel,/Lightbar/);assert.match(panel,/Adaptive triggers/);
@@ -340,7 +340,7 @@ const controlCommands=run=>run.requests.filter(r=>r.url.includes('/control')).ma
 
 test('calibration stages reflect server evidence and never send an automatic command',()=>{
  const run=setup();
- for(const [stage,expected] of [['measured','Measured · unchanged'],['trial_applied','Temporary adjustment · unsaved'],['ready_to_save','Retested · review before saving'],['save_acknowledged','Save acknowledged · restart verification needed'],['verified','Verified after restart'],['ambiguous','Verification inconclusive'],['changed','Calibration changed'],['unknown','Unknown']]){
+ for(const [stage,expected] of [['measured','Measured · unchanged'],['trial_applied','Temporary adjustment · unsaved'],['ready_to_save','Retested · review before saving'],['save_acknowledged','Save acknowledged · restart verification needed'],['verified','Verified after restart'],['ambiguous','Verification inconclusive'],['changed','Calibration changed'],['unknown','Start with a check']]){
   run.accept({...run.input(),status:'complete',calibration:calibrationState(stage)});
   assert.equal(run.nodes.get('calibration-stage').textContent,expected);
   assert.equal(run.nodes.get('calibration-message').textContent,'Server calibration state: '+stage);
@@ -572,4 +572,50 @@ test('gap p95 differs from maximum and the over-50ms count excludes exactly50ms'
  const run=setup({deferUi:true});
  for(const delay of [16,...Array(18).fill(10),50,60]){run.accept(run.input());run.step(delay);}
  const m=run.metrics();assert.equal(m.timingSamples,21);assert.equal(m.frameGapP95Ms,50);assert.equal(m.frameGapMaxMs,60);assert.equal(m.frameGapsOver50Ms,1);
+});
+
+function tuningFixture(){
+ const axis={meanMinPercent:1.57,meanMaxPercent:2.36,peakToPeakPercent:3.15,maxStddevPercent:.42,direction:'positive'};
+ const side={center:{available:true,captures:3,x:axis,y:{...axis,meanMinPercent:-.79,meanMaxPercent:0,direction:'mixed'}},range:{available:true,coveredSectors:48,totalSectors:48,leftPercent:100,rightPercent:96,upPercent:99,downPercent:97,horizontalDifferencePp:4,verticalDifferencePp:2},nextStep:'check_center_repeatability'};
+ return {available:true,scope:'current_check',sticks:{left:side,right:side},note:'PRIVATE_NOTE'};
+}
+
+test('directional tuning details distinguish signed center, quiet spread and electrical reach',()=>{
+ const run=setup(),s=run.input();s.measurements={tuning:tuningFixture()};run.accept(s);
+ assert.match(run.nodes.get('tuning-left-center').textContent,/X \+1.57% to \+2.36%.*Y -0.79% to 0%/);
+ assert.match(run.nodes.get('tuning-left-variation').textContent,/Quiet spread.*3.15%.*standard deviation.*0.42%/);
+ assert.match(run.nodes.get('tuning-left-range').textContent,/left 100%.*right 96%.*horizontal 4.00 pp/);
+ assert.match(run.nodes.get('tuning-left-next').textContent,/repeats after releasing/);
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+ const before=run.nodes.get('tuning-left-center').textWrites.length;run.accept(s);assert.equal(run.nodes.get('tuning-left-center').textWrites.length,before);
+});
+
+test('directional tuning rejects malformed numbers and ignores arbitrary advice in current and historical views',()=>{
+ const run=setup(),t=tuningFixture();t.sticks.left.center.x.meanMinPercent='PRIVATE_VALUE';t.sticks.left.range.leftPercent=101;t.sticks.left.nextStep='PRIVATE_ADVICE';
+ run.context.tuning=t;vm.runInContext("tuningView('tuning',tuning);tuningView('history-tuning',tuning)",run.context);
+ assert.match(run.nodes.get('tuning-left-center').textContent,/unavailable/);assert.match(run.nodes.get('history-tuning-left-range').textContent,/needs a complete/);
+ assert.match(run.nodes.get('tuning-left-next').textContent,/Complete a clean guided check/);
+ assert.doesNotMatch([...run.nodes.values()].map(n=>n.textContent).join(' '),/PRIVATE_/);
+ t.available=false;vm.runInContext("tuningView('tuning',tuning)",run.context);assert.match(run.nodes.get('tuning-right-center').textContent,/unavailable/);
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+});
+
+
+test('both trigger presses are identified individually and analog travel stays separate',()=>{
+ const run=setup(),s=run.input();s.latest.buttons=(1<<6)|(1<<7);s.latest.l2=255;s.latest.r2=255;run.accept(s);run.step();
+ assert.equal(run.nodes.get('button-count').textContent,'L2 + R2');
+ s.latest.buttons=0;s.latest.l2=10;run.accept(s);run.step(100);assert.equal(run.nodes.get('button-count').textContent,'None');
+ assert.equal(run.nodes.get('l2-value').textContent,'4%');
+ s.latest.buttons=0x7fff;run.accept(s);run.step(100);assert.match(run.nodes.get('button-count').textContent,/Square.*L2 \+ R2.*Touchpad \+ Mute/);
+ s.latest.buttons=-1;run.accept(s);run.step(100);assert.equal(run.nodes.get('button-count').textContent,'None');
+});
+
+test('calibration history is disclosed separately while review and confirmation stay visible',()=>{
+ assert.match(html,/<details class="calibration-details" id="calibration-details"><summary>Save history &amp; recovery options<\/summary>/);
+ const details=html.match(/<details class="calibration-details"[^>]*>[\s\S]*?<\/details>/)[0];
+ assert.match(details,/id="calibration-inspect"/);assert.match(details,/id="calibration-reboot"/);assert.match(details,/id="calibration-saved-at"/);
+ assert.doesNotMatch(details,/id="calibration-(save|confirm|diagnostics|help)"/);
+ const run=setup(),s=run.input();s.calibration={stage:'ready_to_save',reviewId:'review',actions:{save:true}};run.accept(s);
+ assert.equal(run.nodes.get('calibration-save').hidden,false);run.click('calibration-save');assert.equal(run.nodes.get('calibration-confirm').hidden,false);
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));
 });
