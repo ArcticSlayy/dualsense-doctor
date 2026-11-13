@@ -34,11 +34,13 @@
     @media(max-width:520px){.steps{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px 10px}.rates{margin-left:0}.option-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.input-strip{gap:10px}}@media(max-width:420px){h2{font-size:18px;flex-basis:220px}.plots{gap:8px}svg{height:124px}.controls button{padding-inline:8px;font-size:12px;min-height:38px}.zoom{margin-left:0}.foot{display:block}.foot span{display:block;margin-top:3px}.top .identity{font-size:13px}.connection-button{min-height:36px}.feedback{min-height:48px}.options summary{padding-inline:9px;min-height:38px}.input-strip{gap:8px}}
     @media(max-width:520px){.controller-grid{grid-template-columns:1fr;gap:16px}.controller-info{grid-template-columns:1fr 1fr}.palette{gap:8px}.palette button{width:40px;min-height:40px}}
     @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+
+    .saved-checks{grid-column:1/-1;border-top:1px solid var(--coach-line);padding-top:16px}.history-actions{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.history-actions label{display:grid;gap:5px;flex:1;min-width:180px}.history-range{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px}.history-range figure{margin:0}.history-range figcaption{font-size:12px;text-align:center}.history-range svg{height:160px;overflow:hidden}.history-envelope{fill:none;stroke:var(--chart-1,#8057ff);stroke-width:1.8}.history-range .right .history-envelope{stroke:var(--chart-2,#20c3c9)}.history-points{fill:var(--chart-1,#8057ff)}.history-range .right .history-points{fill:var(--chart-2,#20c3c9)}.history-note,.trigger-check-note{font-size:12px;line-height:1.5;color:var(--coach-muted)}.history-range .range-reference{fill:none;stroke:var(--coach-line);stroke-dasharray:3 3}.trigger-check{border-top:1px solid var(--coach-line);margin-top:16px;padding-top:12px}.trigger-check-results{font-size:12px;line-height:1.6;margin-top:8px}.trigger-check-bar{height:3px;background:var(--coach-line);margin:8px 0}.trigger-check-bar span{display:block;height:100%;width:0;background:var(--primary,#8057ff)}
   </style>
 </head>
 <body>
   <main class="coach" aria-label="Live DualSense stick coaching">
-    <div class="top"><span class="identity">DualSense Studio</span><span class="connection" id="connection">Connecting…</span><span class="rates" id="rates" aria-hidden="true">— render FPS · — Hz feed</span><button id="connect" class="connection-button" type="button">Connect controller</button></div>
+    <div class="top"><span class="identity">DualSense Studio</span><span class="connection" id="connection">Connecting…</span><span class="rates" id="rates" aria-hidden="true">— view FPS · — Hz feed</span><button id="connect" class="connection-button" type="button">Connect controller</button></div>
     <div class="heading"><h2 id="instruction">Live stick check</h2><div class="timer-wrap" id="timer-wrap" role="timer" aria-label="Check timer"><svg viewBox="0 0 64 64" aria-hidden="true"><circle class="timer-track" cx="32" cy="32" r="27"/><circle class="timer-ring" id="timer-ring" cx="32" cy="32" r="27" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg><span class="timer" id="timer">—</span><span class="timer-label" id="timer-label">Ready</span></div></div>
     <div class="progress" role="progressbar" aria-label="Guided check progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress"><span id="progress-fill"></span></div>
     <ol class="steps" aria-label="Check steps"><li id="step-rest" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Settle</li><li id="step-range-clockwise" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Clockwise</li><li id="step-range-counterclockwise" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Counterclockwise</li><li id="step-release" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Release</li><li id="step-buttons" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Buttons</li><li id="step-verify" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Verify</li></ol>
@@ -64,7 +66,7 @@
       <div class="calibration-confirm" id="calibration-confirm" role="group" aria-labelledby="calibration-confirm-title" hidden><p id="calibration-confirm-title"></p><p id="calibration-confirm-results"></p><div class="calibration-actions"><button type="button" class="primary" id="calibration-confirm-action">Confirm</button><button type="button" id="calibration-cancel">Cancel</button></div></div>
     </section>
     <section class="results" id="results" aria-labelledby="results-title" hidden><h3 id="results-title">Measured deadzone guidance</h3><p class="result-note" id="results-summary"></p><div class="result-values"><section><h4>Left stick · starting deadzone</h4><p class="deadzone-value" id="left-deadzone">Unavailable</p><p class="result-detail" id="left-observed"></p><p class="result-detail" id="left-circularity"></p></section><section><h4>Right stick · starting deadzone</h4><p class="deadzone-value" id="right-deadzone">Unavailable</p><p class="result-detail" id="right-observed"></p><p class="result-detail" id="right-circularity"></p></section></div><p class="result-note" id="results-note">A measured starting point for game settings, not a guarantee of zero drift. No settings are applied.</p><div class="round-history" id="round-history" hidden><h4>Starting deadzone by round</h4><div class="round-row"><span>Round</span><span>Left</span><span>Right</span></div><div class="round-row" id="round-0" hidden><span id="round-0-label">1</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-0-left-bar"></span></span><output id="round-0-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-0-right-bar"></span></span><output id="round-0-right"></output></span></div><div class="round-row" id="round-1" hidden><span id="round-1-label">2</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-1-left-bar"></span></span><output id="round-1-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-1-right-bar"></span></span><output id="round-1-right"></output></span></div><div class="round-row" id="round-2" hidden><span id="round-2-label">3</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-2-left-bar"></span></span><output id="round-2-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-2-right-bar"></span></span><output id="round-2-right"></output></span></div><div class="round-row" id="round-3" hidden><span id="round-3-label">4</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-3-left-bar"></span></span><output id="round-3-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-3-right-bar"></span></span><output id="round-3-right"></output></span></div><div class="round-row" id="round-4" hidden><span id="round-4-label">5</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-4-left-bar"></span></span><output id="round-4-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-4-right-bar"></span></span><output id="round-4-right"></output></span></div><div class="round-row" id="round-5" hidden><span id="round-5-label">6</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-5-left-bar"></span></span><output id="round-5-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-5-right-bar"></span></span><output id="round-5-right"></output></span></div><div class="round-row" id="round-6" hidden><span id="round-6-label">7</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-6-left-bar"></span></span><output id="round-6-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-6-right-bar"></span></span><output id="round-6-right"></output></span></div><div class="round-row" id="round-7" hidden><span id="round-7-label">8</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-7-left-bar"></span></span><output id="round-7-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-7-right-bar"></span></span><output id="round-7-right"></output></span></div><div class="round-row" id="round-8" hidden><span id="round-8-label">9</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-8-left-bar"></span></span><output id="round-8-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-8-right-bar"></span></span><output id="round-8-right"></output></span></div><div class="round-row" id="round-9" hidden><span id="round-9-label">10</span><span class="round-cell"><span class="round-bar" aria-hidden="true"><span id="round-9-left-bar"></span></span><output id="round-9-left"></output></span><span class="round-cell right"><span class="round-bar" aria-hidden="true"><span id="round-9-right-bar"></span></span><output id="round-9-right"></output></span></div></div><div class="results-actions"><button id="repeat-round" type="button">Repeat check</button><button id="reset-rounds" type="button">New comparison</button></div></section>
-    <details class="options controller-controls" id="controller-controls"><summary>Customize view &amp; controller</summary><div class="controller-grid"><section class="view-controls" aria-labelledby="view-title"><h3 class="controller-title" id="view-title">Live view</h3><div class="option-grid"><label class="option-field">Motion trail<select id="trail-mode"><option value="off">Off</option><option value="short">Short</option><option value="long">Long</option></select></label><label class="option-field">Stick view<select id="view-mode"><option value="both">Both sticks</option><option value="left">Left only</option><option value="right">Right only</option></select></label><label class="option-field">Axis values<select id="number-units"><option value="normalized">Normalized −1 to +1</option><option value="raw">Raw 0–255</option></select></label><label class="option-toggle"><input id="center-rings" type="checkbox" checked>Center rings</label><label class="option-toggle"><input id="show-rates" type="checkbox" checked>FPS and feed rate</label><button id="clear-trail" type="button">Clear trails</button></div><p class="option-note">Display changes only. Measurements always use the original controller readings.</p></section><section aria-labelledby="lightbar-title"><h3 class="controller-title" id="lightbar-title">Lightbar</h3><div class="palette" role="group" aria-label="Choose a lightbar color"><button id="lightbar-violet" type="button" aria-label="Select violet lightbar" aria-pressed="true" title="Violet"><span class="swatch" style="background:#8057ff" aria-hidden="true"></span></button><button id="lightbar-blue" type="button" aria-label="Select blue lightbar" aria-pressed="false" title="Blue"><span class="swatch" style="background:#2f7dff" aria-hidden="true"></span></button><button id="lightbar-cyan" type="button" aria-label="Select cyan lightbar" aria-pressed="false" title="Cyan"><span class="swatch" style="background:#20c3c9" aria-hidden="true"></span></button><button id="lightbar-white" type="button" aria-label="Select white lightbar" aria-pressed="false" title="White"><span class="swatch" style="background:#ffffff" aria-hidden="true"></span></button><button id="lightbar-red" type="button" aria-label="Select red lightbar" aria-pressed="false" title="Red"><span class="swatch" style="background:#ef5567" aria-hidden="true"></span></button><button id="lightbar-off" type="button" aria-label="Select lightbar off" aria-pressed="false" title="Off"><span class="swatch" style="background:#000000" aria-hidden="true"></span></button></div><div class="color-fields"><label>Custom color<input id="lightbar-color" type="color" value="#8057ff"></label><label><span class="brightness-label">Brightness <output id="lightbar-brightness-value">100%</output></span><input id="lightbar-brightness" type="range" min="0" max="100" step="1" value="100"></label><div class="hex-field"><label>Hex color<input id="lightbar-hex" type="text" value="#8057FF" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Custom lightbar hex color" aria-invalid="false"></label><span class="color-preview" id="lightbar-preview" aria-label="Selected lightbar color preview"></span></div></div><div class="effect-actions"><button id="lightbar-apply" class="primary" type="button" aria-describedby="lightbar-help" disabled>Apply color</button><span class="effect-status" id="lightbar-status" data-error="false" role="status">Not set this session</span></div><p class="lightbar-help" id="lightbar-help">Connect the controller to apply a color. No test is required.</p><button id="lightbar-connect" class="lightbar-connect" type="button">Connect controller</button></section><section aria-labelledby="trigger-effects-title"><h3 class="controller-title" id="trigger-effects-title">Adaptive triggers</h3><div class="trigger-fields"><label>Effect<select id="trigger-preset"><option value="off">Off</option><option value="light">Light</option><option value="firm">Firm</option><option value="max">Maximum</option><option value="weapon">Weapon</option><option value="custom">Custom resistance</option></select></label><label>Target<select id="trigger-target"><option value="both">Both triggers</option><option value="left">Left trigger</option><option value="right">Right trigger</option></select></label></div><div class="trigger-fields trigger-custom" id="trigger-custom" hidden><label><span class="brightness-label">Wall position <output id="trigger-position-value">2</output></span><input id="trigger-position" type="range" min="0" max="9" step="1" value="2"></label><label><span class="brightness-label">Strength <output id="trigger-strength-value">6</output></span><input id="trigger-strength" type="range" min="1" max="8" step="1" value="6"></label></div><div class="effect-actions"><button id="trigger-apply" type="button" disabled>Apply triggers</button><button id="trigger-reset" type="button" disabled>Reset / off</button><span class="effect-status" id="trigger-status" data-error="false" role="status">Not set this session</span></div><p class="trigger-guide" id="trigger-guide">Requires adaptive-trigger motors. This temporary resistance effect is not analog-trigger calibration.</p></section><dl class="controller-info"><div><dt>Battery</dt><dd id="controller-battery">Unavailable</dd></div><div><dt>Firmware build</dt><dd id="controller-firmware">Unavailable</dd></div></dl></div><p class="controller-note">Apply sends the selected effect now. Games or a power cycle may replace it; it is not saved in controller memory. A sent command does not confirm the physical result.</p></details>
+    <details class="options controller-controls" id="controller-controls"><summary>Customize view &amp; controller</summary><div class="controller-grid"><section class="view-controls" aria-labelledby="view-title"><h3 class="controller-title" id="view-title">Live view</h3><div class="option-grid"><label class="option-field">Motion trail<select id="trail-mode"><option value="off">Off</option><option value="short">Short</option><option value="long">Long</option></select></label><label class="option-field">Stick view<select id="view-mode"><option value="both">Both sticks</option><option value="left">Left only</option><option value="right">Right only</option></select></label><label class="option-field">Axis values<select id="number-units"><option value="normalized">Normalized −1 to +1</option><option value="raw">Raw 0–255</option></select></label><label class="option-toggle"><input id="center-rings" type="checkbox" checked>Center rings</label><label class="option-toggle"><input id="show-rates" type="checkbox" checked>FPS and feed rate</label><button id="clear-trail" type="button">Clear trails</button></div><p class="option-note">Display changes only. Measurements always use the original controller readings.</p></section><section aria-labelledby="lightbar-title"><h3 class="controller-title" id="lightbar-title">Lightbar</h3><div class="palette" role="group" aria-label="Choose a lightbar color"><button id="lightbar-violet" type="button" aria-label="Select violet lightbar" aria-pressed="true" title="Violet"><span class="swatch" style="background:#8057ff" aria-hidden="true"></span></button><button id="lightbar-blue" type="button" aria-label="Select blue lightbar" aria-pressed="false" title="Blue"><span class="swatch" style="background:#2f7dff" aria-hidden="true"></span></button><button id="lightbar-cyan" type="button" aria-label="Select cyan lightbar" aria-pressed="false" title="Cyan"><span class="swatch" style="background:#20c3c9" aria-hidden="true"></span></button><button id="lightbar-white" type="button" aria-label="Select white lightbar" aria-pressed="false" title="White"><span class="swatch" style="background:#ffffff" aria-hidden="true"></span></button><button id="lightbar-red" type="button" aria-label="Select red lightbar" aria-pressed="false" title="Red"><span class="swatch" style="background:#ef5567" aria-hidden="true"></span></button><button id="lightbar-off" type="button" aria-label="Select lightbar off" aria-pressed="false" title="Off"><span class="swatch" style="background:#000000" aria-hidden="true"></span></button></div><div class="color-fields"><label>Custom color<input id="lightbar-color" type="color" value="#8057ff"></label><label><span class="brightness-label">Brightness <output id="lightbar-brightness-value">100%</output></span><input id="lightbar-brightness" type="range" min="0" max="100" step="1" value="100"></label><div class="hex-field"><label>Hex color<input id="lightbar-hex" type="text" value="#8057FF" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Custom lightbar hex color" aria-invalid="false"></label><span class="color-preview" id="lightbar-preview" aria-label="Selected lightbar color preview"></span></div></div><div class="effect-actions"><button id="lightbar-apply" class="primary" type="button" aria-describedby="lightbar-help" disabled>Apply color</button><span class="effect-status" id="lightbar-status" data-error="false" role="status">Not set this session</span></div><p class="lightbar-help" id="lightbar-help">Connect the controller to apply a color. No test is required.</p><button id="lightbar-connect" class="lightbar-connect" type="button">Connect controller</button></section><section aria-labelledby="trigger-effects-title"><h3 class="controller-title" id="trigger-effects-title">Adaptive triggers</h3><div class="trigger-fields"><label>Effect<select id="trigger-preset"><option value="off">Off</option><option value="light">Light</option><option value="firm">Firm</option><option value="max">Maximum</option><option value="weapon">Weapon</option><option value="custom">Custom resistance</option></select></label><label>Target<select id="trigger-target"><option value="both">Both triggers</option><option value="left">Left trigger</option><option value="right">Right trigger</option></select></label></div><div class="trigger-fields trigger-custom" id="trigger-custom" hidden><label><span class="brightness-label">Wall position <output id="trigger-position-value">2</output></span><input id="trigger-position" type="range" min="0" max="9" step="1" value="2"></label><label><span class="brightness-label">Strength <output id="trigger-strength-value">6</output></span><input id="trigger-strength" type="range" min="1" max="8" step="1" value="6"></label></div><div class="effect-actions"><button id="trigger-apply" type="button" disabled>Apply triggers</button><button id="trigger-reset" type="button" disabled>Reset / off</button><span class="effect-status" id="trigger-status" data-error="false" role="status">Not set this session</span></div><p class="trigger-guide" id="trigger-guide">Requires adaptive-trigger motors. This temporary resistance effect is not analog-trigger calibration.</p><div class="trigger-check"><h4 class="controller-title">Analog trigger check</h4><div class="effect-actions"><button id="trigger-check-start" type="button" disabled>Check trigger travel</button><button id="trigger-check-stop" type="button" disabled>Cancel check</button></div><p id="trigger-check-instruction" class="trigger-check-note" role="status">A separate 12-second input recording, after a 3-second countdown. It does not send resistance effects.</p><div class="trigger-check-bar" role="progressbar" id="trigger-check-progress" aria-label="Trigger input recording" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="trigger-check-fill"></span></div><div class="trigger-check-results" id="trigger-check-results" hidden><p id="trigger-check-left"></p><p id="trigger-check-right"></p></div><p class="trigger-check-note">Endpoints and ordered returns are observations, not a smoothness or hardware-health score. Existing game/effect settings can affect how the pull feels.</p></div></section><section class="saved-checks" aria-labelledby="history-title"><h3 class="controller-title" id="history-title">Saved checks · measured range</h3><div class="history-actions"><label>Browse a recorded check<select id="history-select" disabled><option value="">Load saved checks first</option></select></label><button id="history-refresh" type="button">Load saved checks</button></div><p id="history-status" class="history-note" role="status">Stored measurements are viewed separately. Browsing never loads a calibration or changes the current check.</p><div id="history-results" hidden><p id="history-summary" class="history-note"></p><div class="history-range"><figure class="left"><figcaption>Left measured range</figcaption><svg viewBox="0 0 160 160" role="img" aria-label="Left saved angular range at 150 percent scale"><circle cx="80" cy="80" r="70" class="rim"/><circle cx="80" cy="80" r="46.67" class="range-reference"/><path d="M10 80H150M80 10V150" class="axis"/><path id="history-left-path" class="history-envelope"/><path id="history-left-points" class="history-points"/></svg><p id="history-left-coverage" class="history-note"></p><p id="history-left-metrics" class="history-note"></p></figure><figure class="right"><figcaption>Right measured range</figcaption><svg viewBox="0 0 160 160" role="img" aria-label="Right saved angular range at 150 percent scale"><circle cx="80" cy="80" r="70" class="rim"/><circle cx="80" cy="80" r="46.67" class="range-reference"/><path d="M10 80H150M80 10V150" class="axis"/><path id="history-right-path" class="history-envelope"/><path id="history-right-points" class="history-points"/></svg><p id="history-right-coverage" class="history-note"></p><p id="history-right-metrics" class="history-note"></p></figure></div><p class="history-note">Outer circle = 150% radius; dashed circle = 100%. Measured angular maxima preserve missing directions as gaps. This saved check may use a different controller or calibration. Dates and calibration status are local app records.</p></div></section><dl class="controller-info"><div><dt>Battery</dt><dd id="controller-battery">Unavailable</dd></div><div><dt>Firmware build</dt><dd id="controller-firmware">Unavailable</dd></div></dl></div><p class="controller-note">Apply sends the selected effect now. Games or a power cycle may replace it; it is not saved in controller memory. A sent command does not confirm the physical result.</p></details>
     <div class="foot"><span>Checks measure input · saving requires explicit review</span><span>Circularity reference: 7–9% · symmetry matters</span></div>
     <span class="sr-only" aria-live="polite" aria-atomic="true" id="announcement"></span>
   </main>
@@ -85,12 +87,14 @@
     const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const lightbarPresets={violet:'#8057ff',blue:'#2f7dff',cyan:'#20c3c9',white:'#ffffff',red:'#ef5567',off:'#000000'};
     let rafId=null,stopped=false,wasLive=false,lastNumbersAt=-Infinity,lastControlKey='',frameCount=0,receiveCount=0,rateSince=performance.now(),fps=0,receiveHz=0;
+    const frameTimings=[];let lastFreshFrameAt=null,freshPlotFrames=0;
     const stepNames=['rest','range-clockwise','range-counterclockwise','release','buttons','verify'];
     const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
     const norm=v=>(v-128)/127;
     const fmt=v=>(v>=0?'+':'')+v.toFixed(2);
     function text(id,value){const node=$(id);if(node.textContent!==String(value))node.textContent=String(value);}
     function attr(node,key,value){value=String(value);if(node.getAttribute(key)!==value)node.setAttribute(key,value);}
+    function data(node,key,value){value=String(value);if(node.dataset[key]!==value)node.dataset[key]=value;}
     function lightbarSelection(){
       const color=$('lightbar-color').value.toLowerCase();for(const [name,value]of Object.entries(lightbarPresets))attr($('lightbar-'+name),'aria-pressed',color===value);
       $('lightbar-hex').value=color.toUpperCase();attr($('lightbar-hex'),'aria-invalid',!/^#[0-9a-f]{6}$/i.test(color));
@@ -150,8 +154,8 @@
     function announce(value){if(value&&value!==lastAnnounced){text('announcement',value);lastAnnounced=value;}}
     function controls(){
       const running=state?.status==='running',paused=state?.status==='paused';
-      const busy=calibrationBusy(),locked=pending||busy,trial=['trial_applied','ready_to_save'].includes(state?.calibration?.stage);
-      const key=[pending,busy,trial,fresh(),running,paused,Boolean(state),Boolean(state?.connected),Boolean(state?.measurements?.rounds?.length)].join();if(key===lastControlKey)return;lastControlKey=key;
+      const busy=calibrationBusy(),locked=pending||busy||triggerInputActive(),trial=['trial_applied','ready_to_save'].includes(state?.calibration?.stage);
+      const key=[pending,busy,triggerInputActive(),trial,fresh(),running,paused,Boolean(state),Boolean(state?.connected),Boolean(state?.measurements?.rounds?.length)].join();if(key===lastControlKey)return;lastControlKey=key;
       $('start').hidden=trial;$('start').disabled=locked||trial||!fresh()||running||paused;
       $('pause').disabled=locked||(!running&&!paused);text('pause',paused?'Resume':'Pause');
       $('stop').disabled=locked||(!running&&!paused);
@@ -175,8 +179,9 @@
     function accept(next,transport){
       if(stopped||!next||typeof next!=='object')return;
       const now=performance.now();
-      receiveCount++;
       const session=next.sessionId||'';
+      if(Boolean(next.connected)!==Boolean(state?.connected)||session!==lastSession||(wasLive&&!fresh()))resetMetrics(now);
+      if(!document.hidden)receiveCount++;
       if(session!==lastSession){clearTrails();lastSession=session;}
       state=next;if(next.calibration&&typeof next.calibration==='object')calibrationRequestUncertain=false;lastMessageAt=now;lastSource=transport;if(transport==='sse')lastSseAt=now;uiDirty=true;
     }
@@ -188,7 +193,7 @@
       if(warning){lastServerWarning=warning;lastWarning=warning;stickyUntil=now+2500;announce(warning);}
       else if(lastServerWarning){lastServerWarning='';lastWarning='';stickyUntil=0;}
       const sticky=lastWarning&&now<stickyUntil;
-      $('feedback').dataset.warning=String(Boolean(sticky));
+      data($('feedback'),'warning',Boolean(sticky));
       if(sticky)text('feedback',lastWarning);
       else if(next.status==='complete'&&['trial_applied','ready_to_save','save_acknowledged','verified','ambiguous','changed'].includes(next.calibration?.stage))text('feedback',next.calibration.message||'Check complete. Review calibration progress below.');
       else if(next.status==='complete')text('feedback',next.result?.complete===false?'Some captures need another pass. No calibration was changed.':'Results recorded. No controller calibration or game settings changed.');
@@ -198,7 +203,7 @@
       const progress=clamp(Number(next.progress)||0,0,1),width=(progress*100).toFixed(1)+'%';if($('progress-fill').style.width!==width)$('progress-fill').style.width=width;attr($('progress'),'aria-valuenow',Math.round(progress*100));
       guidance();timer(now);
       for(const id of stepNames){const step=next.steps?.find(s=>s.id===id);const status=step?.status||'pending';const node=$('step-'+id);if(node.dataset.status!==status)node.dataset.status=status;const paused=status==='current'&&next.status==='paused';if(node.dataset.paused!==String(paused))node.dataset.paused=String(paused);attr(node,'aria-current',status==='current'?'step':'false');attr(node,'aria-label',`${step?.label||id}: ${paused?'paused':status}`);}
-      controllerInfo();measurements();calibrationView();connection();controls();
+      controllerInfo();measurements();calibrationView();connection();controls();triggerInputView();
     }
     function snapshotModel(){
       const statuses={idle:'Ready',running:'Check in progress',paused:'Check paused',complete:'Check complete',error:'Check needs attention'};
@@ -245,7 +250,7 @@
     function calibrationBusy(){return calibrationRequestUncertain||state?.calibration?.busy===true;}
     function calibrationAllowed(action){
       const cal=state?.calibration;
-      if(!cal||pending||calibrationBusy()||cal.actions?.[action]!==true)return false;
+      if(!cal||pending||calibrationBusy()||triggerInputActive()||cal.actions?.[action]!==true)return false;
       if(action==='save')return cal.stage==='ready_to_save'&&typeof cal.reviewId==='string'&&Boolean(cal.reviewId);
       return true;
     }
@@ -303,11 +308,11 @@
       const cal=state?.calibration,stage=cal?.stage||'unknown';
       $('calibration-confirm').hidden=!calibrationConfirmation;
       const labels={measured:'Measured · unchanged',trial_applied:'Temporary adjustment · unsaved',ready_to_save:'Retested · review before saving',save_acknowledged:'Save acknowledged · restart verification needed',verified:'Verified after restart',ambiguous:'Verification inconclusive',changed:'Calibration changed',unknown:'Unknown'};
-      text('calibration-stage',labels[stage]||'Unknown');$('calibration').dataset.stage=stage;
+      text('calibration-stage',labels[stage]||'Unknown');data($('calibration'),'stage',stage);
       const countdown=Number.isFinite(cal?.countdownSeconds)&&cal.countdownSeconds>0?`Hands off both sticks · ${Math.ceil(cal.countdownSeconds)}s. `:'';
       text('calibration-message',countdown+(cal?.message||'Complete a check to measure the sticks. Checking alone does not change calibration.'));
       const current={unknown:0,measured:1,trial_applied:2,ready_to_save:3,save_acknowledged:4,verified:5}[stage];
-      for(const [i,id] of ['check','trial','retest','save','verify'].entries()){const node=$('cal-step-'+id),status=current===undefined?'pending':i<current?'complete':i===current?'current':'pending';node.dataset.status=status;attr(node,'aria-current',status==='current'?'step':'false');}
+      for(const [i,id] of ['check','trial','retest','save','verify'].entries()){const node=$('cal-step-'+id),status=current===undefined?'pending':i<current?'complete':i===current?'current':'pending';data(node,'status',status);attr(node,'aria-current',status==='current'?'step':'false');}
       const stamp=(value,empty)=>typeof value==='string'&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString():empty;
       text('calibration-saved-at',stamp(cal?.lastSavedAt,cal?'No app save recorded':'History unavailable'));text('calibration-verified-at',stamp(cal?.verifiedAt,cal?'Not verified':'Unavailable'));
       calibrationComparisonView();
@@ -365,19 +370,19 @@
     }
     function guidance(){
       const active=fresh()&&state?.status==='running',range=active&&state.phase==='range',preparing=active&&state.preparing;
-      $('movement-guide').hidden=!range;$('movement-guide').dataset.direction=state?.direction||'clockwise';$('plots').dataset.guidedRange=String(range&&zoom===1);
+      $('movement-guide').hidden=!range;data($('movement-guide'),'direction',state?.direction||'clockwise');data($('plots'),'guidedRange',range&&zoom===1);
       const direction=state?.direction==='counterclockwise'?'counterclockwise':'clockwise';text('movement-label',`${preparing?'Next: ':''}Full outer edge · ${direction}`);
       for(const side of ['left','right']){
         const d=state?.details?.[side],message=d?.cueMessage||d?.cue?.message;
         $(side+'-cue').hidden=!active||Boolean(preparing)||!message;
-        text(side+'-cue',message||'');$(side+'-cue').dataset.tone=d?.cueTone||d?.cue?.tone||'neutral';
+        text(side+'-cue',message||'');data($(side+'-cue'),'tone',d?.cueTone||d?.cue?.tone||'neutral');
         const covered=Number(d?.coveredSectors);$(side+'-coverage').hidden=!range||Boolean(preparing)||!Number.isFinite(covered);
         if(Number.isFinite(covered))$(side+'-coverage-fill').style.width=(clamp(covered,0,16)/16*100)+'%';
       }
     }
     function timer(now=performance.now()){
       const active=fresh()&&state?.status==='running',preparing=active&&state.preparing;
-      $('timer-wrap').dataset.preparing=String(Boolean(preparing));
+      data($('timer-wrap'),'preparing',Boolean(preparing));
       let value='—',label=state?.status==='paused'?'Paused':state?.status==='complete'?'Complete':'Ready',fraction=state?.status==='complete'?1:0;
       if(preparing){
         const reported=Math.max(0,Number(state.prepareSecondsRemaining)||0),remaining=Math.max(0,reported-(now-lastMessageAt)/1000),duration=Math.max(1,Number(state.prepareDurationSeconds)||3);
@@ -403,7 +408,7 @@
       poll();pollTimer=setInterval(poll,33);
     }
     async function command(action,payload={}){
-      if(stopped||pending||(calibrationBusy()&&!action.startsWith('calibration_')))return false;pending=true;controls();
+      if(stopped||pending||(calibrationBusy()&&!action.startsWith('calibration_'))||(triggerInputActive()&&!['trigger_check_stop','disconnect'].includes(action)))return false;pending=true;controls();
       try{
         const r=await fetch(url('/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action}),referrerPolicy:'no-referrer',signal:AbortSignal.timeout(action.startsWith('calibration_')?60000:8000)});
         const data=await r.json();if(!r.ok||data.error)throw Error(data.error||'Could not '+action);
@@ -457,19 +462,97 @@
       if(sent){text('trigger-status','Trigger effect sent');$('trigger-status').dataset.error='false';lastTriggerAt=state?.effects?.triggers?.sentAt||lastTriggerAt;if(reset){$('trigger-preset').value='off';$('trigger-target').value='both';triggerSelection();}}
     }
     $('trigger-apply').addEventListener('click',()=>applyTriggers());$('trigger-reset').addEventListener('click',()=>applyTriggers(true));
+
+    let savedChecks=[],historyLoading=false;
+    function triggerInputActive(){return ['preparing','recording','saving'].includes(state?.triggerCheck?.status);}
+    function triggerInputView(){
+      const check=state?.triggerCheck,active=triggerInputActive(),locked=pending||calibrationBusy()||!fresh()||['running','paused'].includes(state?.status);
+      const startDisabled=locked||active||!check,stopDisabled=pending||!active;if($('trigger-check-start').disabled!==startDisabled)$('trigger-check-start').disabled=startDisabled;if($('trigger-check-stop').disabled!==stopDisabled)$('trigger-check-stop').disabled=stopDisabled;
+      const fixed={idle:'Release the triggers. Start when ready for a separate slow pull-and-release recording.',saving:'Saving trigger measurements locally…',complete:'Trigger measurements saved locally. No controller settings changed.',cancelled:'Trigger check cancelled. Repeat when ready.',error:'The check could not be saved. Repeat when ready.'};
+      let message=fixed[check?.status]||'Update the local coach to use trigger input checks.';
+      if(check?.status==='preparing')message=`Release both triggers · starting in ${Math.ceil(clamp(Number(check.remainingSeconds)||0,0,3))}s`;
+      if(check?.status==='recording')message=(Math.floor((12-clamp(Number(check.remainingSeconds)||0,0,12))/2)%2===0?'Slowly pull both triggers fully':'Slowly release both triggers fully')+` · ${Math.ceil(clamp(Number(check.remainingSeconds)||0,0,12))}s left`;
+      if(check?.saveStatus==='abandoned')message='Check cancelled during saving. An in-flight local report may remain; it is not used as a completed check.';
+      text('trigger-check-instruction',message);
+      const progress=clamp(Number(check?.progress)||0,0,1),width=(progress*100).toFixed(1)+'%';if($('trigger-check-fill').style.width!==width)$('trigger-check-fill').style.width=width;attr($('trigger-check-progress'),'aria-valuenow',Math.round(progress*100));
+      const hideResults=check?.status!=='complete';if($('trigger-check-results').hidden!==hideResults)$('trigger-check-results').hidden=hideResults;
+      for(const [side,key]of [['left','l2'],['right','r2']]){
+        const v=check?.analysis?.triggers?.[key],byte=x=>Number.isInteger(x)&&x>=0&&x<=255?String(x):'unavailable',count=x=>Number.isInteger(x)&&x>=0&&x<=4000?String(x):'unavailable';
+        text('trigger-check-'+side,`${key.toUpperCase()}: ${v?.available?`observed ${byte(v.observed?.min)}–${byte(v.observed?.max)} / 255 · ${count(v.cycles?.slowSweeps)} slow sweeps · ${count(v.return?.count)} returns`:'measurement unavailable'}`);
+      }
+    }
+    function rangePaths(geometry){
+      const radii=geometry?.sectorRadii;if(!Array.isArray(radii)||radii.length!==48)return {line:'',points:'',covered:0};
+      const values=Array.from(radii,r=>Number.isFinite(r)&&r>.2&&r<=1.5?r:null);
+      const xy=(r,i)=>[80+Math.cos(i*Math.PI/24)*r*70/1.5,80+Math.sin(i*Math.PI/24)*r*70/1.5];let line='',points='',covered=0;
+      for(let i=0;i<48;i++){if(values[i]===null)continue;covered++;const [x,y]=xy(values[i],i),next=(i+1)%48;
+        points+=`M${(x-1).toFixed(2)} ${y.toFixed(2)}a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 `;
+        if(values[next]!==null){const [nx,ny]=xy(values[next],next);line+=`M${x.toFixed(2)} ${y.toFixed(2)}L${nx.toFixed(2)} ${ny.toFixed(2)} `;}
+      }return {line,points,covered};
+    }
+    function showSavedCheck(){
+      const selected=savedChecks[Number($('history-select').value)];$('history-results').hidden=!selected;
+      if(!selected)return;
+      const mode={usb:'USB',bt:'Bluetooth','bt-compat':'Basic Bluetooth'}[selected.transport]||'Transport unavailable';
+      const calibration={none_recorded:'no app calibration recorded',temporary_attempted:'temporary adjustment recorded',pending:'save pending',ambiguous:'save uncertain',save_acknowledged:'save acknowledged',verified:'restart verified in that session',unknown:'calibration history unavailable'}[selected.calibration?.status]||'calibration history unavailable';
+      text('history-summary',`${selected.complete===true?'Complete recorded check':'Incomplete recorded check'} · ${mode} · ${calibration}. Historical view only.`);
+      const percent=(n,max=150)=>Number.isFinite(n)&&n>=0&&n<=max?n.toFixed(2).replace(/\.?0+$/,'')+'%':'unavailable';
+      for(const side of ['left','right']){const paths=rangePaths(selected.range?.[side]);attr($('history-'+side+'-path'),'d',paths.line);attr($('history-'+side+'-points'),'d',paths.points);text('history-'+side+'-coverage',`${paths.covered}/48 measured directions${paths.covered<48?' · gaps retained':''}`);
+        const metric=selected.comparison?.comparable===true?selected.comparison[side]:null;text('history-'+side+'-metrics',`Quiet peak ${percent(metric?.observedPeakPercent)} · suggested game deadzone ${percent(metric?.suggestedDeadzonePercent,20)} · circularity ${percent(metric?.circularity?.latest)}. Settings not applied.`);
+      }
+    }
+    function acceptHistory(data){
+      savedChecks=Array.isArray(data?.sessions)?data.sessions.filter(v=>v&&typeof v==='object'&&!Array.isArray(v)).slice(0,10):[];
+      const select=$('history-select');select.replaceChildren();savedChecks.forEach((entry,i)=>{const option=document.createElement('option');option.value=String(i);const date=typeof entry.created==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(entry.created)&&Number.isFinite(Date.parse(entry.created))?new Date(entry.created).toLocaleString():'Date unavailable';option.textContent=`Saved check ${i+1} · ${date}`;select.append(option);});
+      select.disabled=!savedChecks.length;select.value=savedChecks.length?'0':'';
+      text('history-status',savedChecks.length?`${savedChecks.length} saved checks loaded${data.truncated?' · bounded recent list':''}${data.notice?' · some records could not be read':''}. This never replaces the active calibration review.`:data?.notice?'Saved checks could not be loaded.':'No saved checks yet. Complete a guided stick check first.');showSavedCheck();
+    }
+    async function loadHistory(){
+      if(historyLoading)return;historyLoading=true;$('history-refresh').disabled=true;text('history-status','Reading saved checks…');
+      try{const response=await fetch(url('/history'),{cache:'no-store',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(5000)});if(!response.ok)throw Error('Unavailable');acceptHistory(await response.json());}
+      catch{text('history-status','Saved checks are unavailable. Your live check is unchanged.');}
+      finally{historyLoading=false;$('history-refresh').disabled=false;}
+    }
+    $('history-refresh').addEventListener('click',loadHistory);$('history-select').addEventListener('change',showSavedCheck);
+    $('trigger-check-start').addEventListener('click',()=>{if(!$('trigger-check-start').disabled)command('trigger_check_start');});
+    $('trigger-check-stop').addEventListener('click',()=>{if(triggerInputActive())command('trigger_check_stop');});
+
+    function resetMetrics(now=performance.now()){
+      frameCount=0;receiveCount=0;rateSince=now;fps=0;receiveHz=0;frameTimings.length=0;lastFreshFrameAt=null;freshPlotFrames=0;
+      text('rates','— view FPS · — Hz feed');
+    }
+    function timingMetrics(){
+      const gaps=frameTimings.map(s=>s.gap).filter(Number.isFinite),work=frameTimings.map(s=>s.work);
+      const p95=values=>values.length?[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1]:0;
+      return {frameGapP95Ms:p95(gaps),frameGapMaxMs:Math.max(0,...gaps),frameGapsOver50Ms:gaps.filter(ms=>ms>50).length,
+        frameWorkP95Ms:p95(work),frameWorkMaxMs:Math.max(0,...work),freshPlotFrames,timingSamples:frameTimings.length};
+    }
+    function timingDescription(){
+      const m=timingMetrics();
+      return `FPS counts fresh requestAnimationFrame callbacks, not painted frames. Latest ${m.timingSamples} visible, fresh callbacks: gap p95 ${m.frameGapP95Ms.toFixed(2)} ms / max ${m.frameGapMaxMs.toFixed(2)} ms; ${m.frameGapsOver50Ms} gaps over 50 ms. Synchronous callback JavaScript work p95 ${m.frameWorkP95Ms.toFixed(2)} ms / max ${m.frameWorkMaxMs.toFixed(2)} ms. Work excludes browser paint, GPU and end-to-end latency. Gaps are observed intervals, not inferred dropped frames.`;
+    }
     function frame(now){
       if(stopped)return;
-      if(uiDirty)renderState(now);timer(now);
-      if(fresh()){frameCount++;draw(now);}
-      else{if(wasLive)neutralize();guidance();connection();controls();if(state?.connected&&!calibrationBusy()){text('feedback','Input paused. Waiting for fresh controller readings.');$('feedback').dataset.warning='false';}}
-      const elapsed=now-rateSince;if(elapsed>=1000){fps=Math.round(frameCount*1000/elapsed);receiveHz=Math.round(receiveCount*1000/elapsed);text('rates',`${fps} render FPS · ${receiveHz} Hz feed`);frameCount=0;receiveCount=0;rateSince=now;}
+      const workStarted=performance.now();
+      if(document.hidden){lastFreshFrameAt=null;rafId=requestAnimationFrame(frame);return;}
+      if(uiDirty)renderState(now);else timer(now);
+      const live=fresh();
+      if(live){frameCount++;freshPlotFrames++;draw(now);}
+      else{if(wasLive){resetMetrics(now);neutralize();}guidance();connection();controls();if(state?.connected&&!calibrationBusy()){text('feedback','Input paused. Waiting for fresh controller readings.');data($('feedback'),'warning',false);}}
+      const elapsed=now-rateSince;if(elapsed>=1000){fps=Math.round(frameCount*1000/elapsed);receiveHz=Math.round(receiveCount*1000/elapsed);text('rates',`${fps} view FPS · ${receiveHz} Hz feed`);attr($('rates'),'title',timingDescription());frameCount=0;receiveCount=0;rateSince=now;}
+      if(live){
+        // This measures synchronous callback work, not browser layout/paint or GPU time.
+        frameTimings.push({gap:lastFreshFrameAt===null?null:Math.max(0,workStarted-lastFreshFrameAt),work:Math.max(0,performance.now()-workStarted)});
+        if(frameTimings.length>240)frameTimings.shift();lastFreshFrameAt=workStarted;
+      }else lastFreshFrameAt=null;
       rafId=requestAnimationFrame(frame);
     }
-    async function reportMetrics(){if(stopped||!fresh())return;try{await fetch(url('/metrics'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fps,receiveHz,clientAgeMs:Math.max(0,performance.now()-lastMessageAt)}),referrerPolicy:'no-referrer',signal:AbortSignal.timeout(1800)});}catch{}}
+    async function reportMetrics(){if(stopped||document.hidden||!fresh())return;const timing=timingMetrics();attr($('rates'),'title',timingDescription());try{await fetch(url('/metrics'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fps,receiveHz,clientAgeMs:Math.max(0,performance.now()-lastMessageAt),...timing}),referrerPolicy:'no-referrer',signal:AbortSignal.timeout(1800)});}catch{}}
+    document.addEventListener('visibilitychange',()=>{resetMetrics();if(!document.hidden){uiDirty=true;lastNumbersAt=-Infinity;}});
     window.addEventListener('pagehide',()=>{stopped=true;source?.close();clearInterval(pollTimer);clearInterval(metricsTimer);if(rafId!==null)cancelAnimationFrame(rafId);});
-    function boot(){if(!stopped&&rafId!==null)return;stopped=false;lastMessageAt=0;lastSseAt=0;polling=false;frameCount=0;receiveCount=0;rateSince=performance.now();neutralize();stream();rafId=requestAnimationFrame(frame);metricsTimer=setInterval(reportMetrics,5000);}
+    function boot(){if(!stopped&&rafId!==null)return;stopped=false;lastMessageAt=0;lastSseAt=0;polling=false;resetMetrics();attr($('rates'),'title',timingDescription());neutralize();stream();rafId=requestAnimationFrame(frame);metricsTimer=setInterval(reportMetrics,5000);}
     window.addEventListener('pageshow',event=>{if(event.persisted)boot();});
-    displayPreferences();boot();controllerInfo();calibrationView();controls();lightbarSelection();triggerSelection();
+    displayPreferences();boot();controllerInfo();calibrationView();controls();lightbarSelection();triggerSelection();triggerInputView();
   </script>
 </body>
 </html>

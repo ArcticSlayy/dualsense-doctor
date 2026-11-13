@@ -6,12 +6,12 @@ import vm from 'node:vm';
 const html=readFileSync(new URL('../coach-card.html',import.meta.url),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replaceAll('__API_BASE__','http://127.0.0.1:27892').replaceAll('__TOKEN__','test-token');
 function setup({storedPreferences,blockedStorage=false,controlResponse,controlError,deferUi=false,reducedMotion=false}={}){
-  let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],timeouts=[],nodes=new Map(),storage=new Map(),downloads=[],canvasWrites=[];
+  let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],timeouts=[],nodes=new Map(),storage=new Map(),downloads=[],canvasWrites=[],datasetWrites=[];
   const drawing={measureText:value=>({width:String(value).length*11}),fillText:(...args)=>canvasWrites.push(args)};for(const method of ['fillRect','beginPath','arc','stroke','moveTo','lineTo','setLineDash','fill'])drawing[method]=()=>{};
   if(storedPreferences)storage.set('dualsense-coach-display',JSON.stringify(storedPreferences));
-  for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{_textContent:'',textWrites:[],get textContent(){return this._textContent;},set textContent(value){this._textContent=value;this.textWrites.push(value);},attributes:{},writes:[],style:{},dataset:{},disabled:false,hidden:false,value:'',checked:false,listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
+  for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{_textContent:'',textWrites:[],get textContent(){return this._textContent;},set textContent(value){this._textContent=value;this.textWrites.push(value);},attributes:{},writes:[],style:{},dataset:new Proxy({}, {set(target,key,value){datasetWrites.push([match[1],key,value]);target[key]=value;return true;}}),disabled:false,hidden:false,value:'',checked:false,children:[],replaceChildren(){this.children=[];},append(child){this.children.push(child);},listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
   class EventSource{constructor(){this.closed=false;}addEventListener(){}close(){this.closed=true;}}
-  const context=vm.createContext({document:{createElement:tag=>tag==='canvas'?{getContext:()=>drawing,toDataURL:()=> 'data:image/png;base64,c3ludGhldGlj'}:{click(){downloads.push({href:this.href,download:this.download});}},getElementById:id=>{assert.ok(nodes.has(id),id);return nodes.get(id);}},performance:{now:()=>now},URL,AbortSignal:{timeout:ms=>{timeouts.push(ms);return AbortSignal.timeout(ms);}},
+  const context=vm.createContext({document:{hidden:false,addEventListener:(name,fn)=>listeners.set(name,fn),createElement:tag=>tag==='canvas'?{getContext:()=>drawing,toDataURL:()=> 'data:image/png;base64,c3ludGhldGlj'}:{click(){downloads.push({href:this.href,download:this.download});}},getElementById:id=>{assert.ok(nodes.has(id),id);return nodes.get(id);}},performance:{now:()=>now},URL,AbortSignal:{timeout:ms=>{timeouts.push(ms);return AbortSignal.timeout(ms);}},
     requestAnimationFrame:fn=>{const id=nextId++;frames.set(id,fn);return id;},cancelAnimationFrame:id=>frames.delete(id),
     setInterval:(fn,ms)=>{const id=nextId++;intervals.set(id,{fn,ms});return id;},clearInterval:id=>intervals.delete(id),
     EventSource,fetch:(url,options)=>{requests.push({url:String(url),options});if(String(url).includes('/control')&&controlError)return Promise.reject(controlError);if(String(url).includes('/control')&&controlResponse)return Promise.resolve({ok:controlResponse.ok!==false,json:async()=>controlResponse.body??{connected:true,status:'idle'}});return new Promise(()=>{});},
@@ -19,7 +19,7 @@ function setup({storedPreferences,blockedStorage=false,controlResponse,controlEr
     window:{addEventListener:(name,fn)=>listeners.set(name,fn),matchMedia:()=>({matches:reducedMotion})},console});
   vm.runInContext(script,context);
   const input=(lx=128)=>({connected:true,status:'idle',latest:{lx,ly:128,rx:128,ry:128,mode:'usb'},ageMs:0,instruction:'Move the sticks',progress:0,details:{}});
-  return {context,nodes,frames,intervals,listeners,requests,timeouts,input,storage,downloads,canvasWrites,change(id,value){const node=nodes.get(id);assert.ok(node,id);if(typeof value==='boolean')node.checked=value;else node.value=value;node.listeners.get('change')?.({target:node});},click(id){nodes.get(id).listeners.get('click')?.();},accept(s){context.input=s;vm.runInContext("accept(input,'sse')",context);if(!deferUi)vm.runInContext("renderState()",context);},step(ms=16){now+=ms;const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(now);},at(value){now=value;}};
+  return {context,nodes,frames,intervals,listeners,requests,timeouts,input,storage,downloads,canvasWrites,datasetWrites,consume(ms){now+=ms;},hidden(value){context.document.hidden=value;listeners.get('visibilitychange')?.();},metrics(){vm.runInContext('reportMetrics()',context);const request=requests.filter(r=>r.url.includes('/metrics')).at(-1);return request?JSON.parse(request.options.body):null;},change(id,value){const node=nodes.get(id);assert.ok(node,id);if(typeof value==='boolean')node.checked=value;else node.value=value;node.listeners.get('change')?.({target:node});},click(id){nodes.get(id).listeners.get('click')?.();},accept(s){context.input=s;vm.runInContext("accept(input,'sse')",context);if(!deferUi)vm.runInContext("renderState()",context);},step(ms=16){now+=ms;const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(now);},at(value){now=value;}};
 }
 
 test('multiple feed updates coalesce into one animation-frame plot update',()=>{
@@ -29,6 +29,46 @@ test('multiple feed updates coalesce into one animation-frame plot update',()=>{
  assert.equal(run.frames.size,1);run.step();
  assert.equal(dot.writes.filter(([k])=>k==='cx').length,1);
  assert.equal(run.nodes.get('instruction').textContent,'Move the sticks');
+});
+
+test('saved checks are read-only selections and never alter the active calibration review',()=>{
+ const run=setup(),s=run.input();s.calibration={stage:'ready_to_save',reviewId:'review-active',actions:{save:true}};run.accept(s);
+ run.context.historyData={sessions:[{id:'private-identifier',goal:'PRIVATE_GOAL',created:'2026-01-02T12:00:00Z',complete:true,transport:'usb',calibration:{status:'verified'},comparison:{comparable:true,left:{observedPeakPercent:2,suggestedDeadzonePercent:3}},range:{left:{sectorRadii:Array(48).fill(1)},right:{sectorRadii:Array(48).fill(null)}}}]};
+ vm.runInContext('acceptHistory(historyData)',run.context);
+ assert.equal(vm.runInContext('state.calibration.reviewId',run.context),'review-active');assert.equal(vm.runInContext('state.calibration.stage',run.context),'ready_to_save');
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+ assert.match(run.nodes.get('history-left-coverage').textContent,/48\/48/);assert.match(run.nodes.get('history-right-coverage').textContent,/0\/48.*gaps/);
+ const visible=[...run.nodes.values()].map(n=>n.textContent).join(' ')+run.nodes.get('history-select').children.map(n=>n.textContent).join(' ');
+ assert.doesNotMatch(visible,/private-identifier|PRIVATE_GOAL/);
+});
+
+test('measured range preserves gaps, wraparound and real above-100-percent radius',()=>{
+ const run=setup();run.context.geometry={sectorRadii:Array(48).fill(null)};run.context.geometry.sectorRadii[0]=1.4;run.context.geometry.sectorRadii[47]=1;run.context.geometry.sectorRadii[2]=1;
+ const paths=vm.runInContext('rangePaths(geometry)',run.context);assert.equal(paths.covered,3);assert.equal((paths.line.match(/L/g)||[]).length,1);assert.match(paths.line,/145\.33 80\.00/);
+ run.context.geometry.sectorRadii[1]='1';run.context.geometry.sectorRadii[3]=2;run.context.geometry.sectorRadii[4]=0;
+ assert.equal(vm.runInContext('rangePaths(geometry).covered',run.context),3);
+});
+
+test('history excludes malformed values and arbitrary server text from results and PNG',()=>{
+ const run=setup();run.accept(run.input());run.context.historyData={notice:'PRIVATE_PATH',sessions:[null,{created:'PRIVATE_DATE',transport:'PRIVATE_MODE',calibration:{status:'PRIVATE_STATUS'},comparison:{comparable:true,left:{observedPeakPercent:'2',suggestedDeadzonePercent:999}},range:{left:{sectorRadii:Array(48).fill('1')}}}]};
+ vm.runInContext('acceptHistory(historyData);saveSnapshot()',run.context);
+ const rendered=[...run.nodes.values()].map(n=>n.textContent).join(' ')+run.canvasWrites.flat().join(' ')+run.nodes.get('history-select').children.map(n=>n.textContent).join(' ');
+ assert.doesNotMatch(rendered,/PRIVATE_/);assert.match(run.nodes.get('history-left-metrics').textContent,/unavailable/);assert.equal(run.nodes.get('history-left-path').attributes.d,'');
+});
+
+test('trigger input checks start only explicitly and exclude effects and calibration while active',()=>{
+ const run=setup(),s=run.input();s.triggerCheck={status:'idle',progress:0};run.accept(s);assert.equal(run.nodes.get('trigger-check-start').disabled,false);assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+ run.click('trigger-check-start');assert.equal(JSON.parse(run.requests.find(r=>r.url.includes('/control')).options.body).action,'trigger_check_start');
+ const active=setup(),v=active.input();v.triggerCheck={status:'recording',remainingSeconds:8,progress:1/3};active.accept(v);
+ assert.equal(active.nodes.get('trigger-apply').disabled,true);assert.equal(active.nodes.get('lightbar-apply').disabled,true);assert.equal(active.nodes.get('start').disabled,true);
+ assert.match(active.nodes.get('trigger-check-instruction').textContent,/Slowly pull.*8s/);assert.equal(active.nodes.get('trigger-check-stop').disabled,false);active.click('trigger-check-stop');
+ assert.equal(JSON.parse(active.requests.find(r=>r.url.includes('/control')).options.body).action,'trigger_check_stop');
+});
+
+test('trigger results use bounded observed values and identify abandoned local saves',()=>{
+ const run=setup(),s=run.input();s.triggerCheck={status:'complete',saveStatus:'saved',progress:1,analysis:{triggers:{l2:{available:true,observed:{min:0,max:255},cycles:{slowSweeps:2},return:{count:3}},r2:{available:false,note:'PRIVATE'}}}};run.accept(s);
+ assert.match(run.nodes.get('trigger-check-left').textContent,/0–255.*2 slow sweeps.*3 returns/);assert.match(run.nodes.get('trigger-check-right').textContent,/unavailable/);
+ s.triggerCheck={status:'cancelled',saveStatus:'abandoned'};run.accept(s);assert.match(run.nodes.get('trigger-check-instruction').textContent,/in-flight local report may remain/);assert.equal(run.nodes.get('trigger-check-results').hidden,true);
 });
 test('raw numeric readings are throttled while stick dots continue at frame rate',()=>{
  const run=setup();run.accept(run.input(160));run.step();
@@ -65,7 +105,7 @@ test('fallback polling targets33ms and measured metrics post every5s only with f
  metricTimer.fn();assert.ok(!run.requests.some(r=>r.url.includes('/metrics')));
  run.accept(run.input());run.step();metricTimer.fn();
  const metrics=run.requests.find(r=>r.url.includes('/metrics'));assert.ok(metrics);
- assert.deepEqual(Object.keys(JSON.parse(metrics.options.body)).sort(),['clientAgeMs','fps','receiveHz']);
+ const values=JSON.parse(metrics.options.body);for(const key of ['clientAgeMs','fps','receiveHz'])assert.ok(Number.isFinite(values[key]));
 });
 test('checklist reflects complete, current and paused steps without changing its labels',()=>{
  const run=setup(),s=run.input();s.status='paused';s.steps=[{id:'rest',label:'Settle',status:'complete'},{id:'range-clockwise',label:'Clockwise',status:'current'}];run.accept(s);
@@ -477,4 +517,59 @@ test('diagnostic metric limits keep malformed large values unavailable without h
  assert.equal(run.nodes.get('diagnostic-left-deadzone-before').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-deadzone-after').textContent,'20%');assert.equal(run.nodes.get('diagnostic-left-deadzone-delta').textContent,'Unavailable');
  assert.equal(run.nodes.get('diagnostic-left-circularity-before').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-circularity-delta').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-symmetry-delta').textContent,'−150 pp');assert.equal(run.nodes.get('diagnostic-left-release_peak-delta').textContent,'+150 pp');
  assert.deepEqual(controlCommands(run),[]);
+});
+
+
+test('identical live snapshots avoid repeated dataset writes and update the timer once per callback',()=>{
+ const run=setup({deferUi:true}),s=run.input();run.accept(s);run.step();
+ const before=run.datasetWrites.length;let timerPasses=0;run.context.countTimer=()=>timerPasses++;
+ vm.runInContext('const actualTimer=timer;timer=(...args)=>{countTimer();return actualTimer(...args)}',run.context);
+ for(let i=0;i<10;i++){run.accept(s);run.step(8);}
+ assert.equal(run.datasetWrites.length,before);assert.equal(timerPasses,10);
+});
+
+test('visible fresh timing reports RAF gaps and synchronous callback work without inferring dropped frames',()=>{
+ const run=setup({deferUi:true});run.context.consume=run.consume;
+ vm.runInContext('const actualDraw=draw;draw=(...args)=>{const result=actualDraw(...args);consume(2);return result}',run.context);
+ for(const delay of [16,10,20,60]){run.accept(run.input());run.step(delay);}
+ const m=run.metrics();
+ assert.equal(m.timingSamples,4);assert.equal(m.freshPlotFrames,4);
+ // Two ms of synthetic callback work also separate callback start times.
+ assert.equal(m.frameGapP95Ms,62);assert.equal(m.frameGapMaxMs,62);assert.equal(m.frameGapsOver50Ms,1);
+ assert.equal(m.frameWorkP95Ms,2);assert.equal(m.frameWorkMaxMs,2);
+ assert.match(run.nodes.get('rates').attributes.title,/callback.*paint/i);
+ assert.equal(Object.keys(m).some(key=>/drop|latency/i.test(key)),false);
+});
+
+test('hidden cards do no frame work or metric posts and resumed timing excludes background time',()=>{
+ const run=setup({deferUi:true});run.accept(run.input());run.step();run.accept(run.input());run.step(60);
+ assert.equal(run.metrics().frameGapsOver50Ms,1);run.hidden(true);
+ const writes=run.datasetWrites.length,requests=run.requests.length;
+ run.accept(run.input(240));run.step(10000);vm.runInContext('reportMetrics()',run.context);
+ assert.equal(run.datasetWrites.length,writes);assert.equal(run.requests.length,requests);
+ run.hidden(false);run.accept(run.input(160));run.step();
+ const m=run.metrics();assert.equal(m.freshPlotFrames,1);assert.equal(m.timingSamples,1);assert.equal(m.frameGapMaxMs,0);assert.equal(m.frameGapsOver50Ms,0);
+ assert.equal(m.fps,0);assert.equal(m.receiveHz,0);
+});
+
+test('stale input, reconnect and cached-page restoration reset timing without counting first gaps',()=>{
+ const run=setup({deferUi:true});run.accept(run.input());run.step();run.accept(run.input());run.step(60);
+ run.step(301);run.accept(run.input());run.step();assert.equal(run.metrics().frameGapMaxMs,0);
+ run.accept({...run.input(),connected:false});run.step(1000);run.accept(run.input());run.step();assert.equal(run.metrics().frameGapMaxMs,0);
+ run.listeners.get('pagehide')();run.at(50000);run.listeners.get('pageshow')({persisted:true});run.accept(run.input());run.step();
+ const m=run.metrics();assert.equal(m.timingSamples,1);assert.equal(m.frameGapMaxMs,0);assert.equal(m.freshPlotFrames,1);
+});
+
+test('rolling timing storage evicts old gaps while retaining a count of fresh plot callbacks',()=>{
+ const run=setup({deferUi:true});run.accept(run.input());run.step();run.accept(run.input());run.step(60);
+ for(let i=0;i<300;i++){run.accept(run.input());run.step(8);}
+ const m=run.metrics();assert.equal(m.timingSamples,240);assert.equal(m.freshPlotFrames,302);
+ assert.equal(m.frameGapMaxMs,8);assert.equal(m.frameGapsOver50Ms,0);
+});
+
+
+test('gap p95 differs from maximum and the over-50ms count excludes exactly50ms',()=>{
+ const run=setup({deferUi:true});
+ for(const delay of [16,...Array(18).fill(10),50,60]){run.accept(run.input());run.step(delay);}
+ const m=run.metrics();assert.equal(m.timingSamples,21);assert.equal(m.frameGapP95Ms,50);assert.equal(m.frameGapMaxMs,60);assert.equal(m.frameGapsOver50Ms,1);
 });
