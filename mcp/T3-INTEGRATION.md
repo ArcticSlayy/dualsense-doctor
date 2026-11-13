@@ -18,7 +18,13 @@ The relay targets 125 Hz. The card reports actual input-feed and rendered-displa
 
 Light-bar color and brightness are previewed locally. The preview does not predict the physical LED's appearance. Press **Apply color** to send it. Adaptive-trigger settings also require explicit Apply and compatible trigger motors. Sent commands do not confirm physical effect. Games may replace effects; power-off resets them. Effects are separate from stick and trigger-endpoint calibration.
 
-The PNG snapshot uses a whitelist of display values: status, phase, live stick values, calibration stage/results, and round summaries. It omits device identifiers, filesystem paths, and the local capability token. If the browser blocks download, the image remains in the card preview to open or save.
+The before/after view separates resting peak, game deadzone candidate, circularity,
+range symmetry and release peak. It uses fixed labels and numeric values; missing
+measurements remain unavailable. Table updates are cached while live plots keep
+their frame-based refresh. Circularity changes are neutral observations, not a
+health score or an automatic save recommendation.
+
+The PNG snapshot uses a whitelist of display values: status, phase, live stick values, calibration stage/results, the five before/after metrics, and round summaries. It omits device identifiers, filesystem paths, arbitrary server messages and the local capability token. If the browser blocks download, the image remains in the card preview to open or save.
 
 ## Local service and privacy
 

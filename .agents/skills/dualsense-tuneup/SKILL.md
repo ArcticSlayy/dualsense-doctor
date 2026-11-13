@@ -30,6 +30,11 @@ Never automatically retry an ambiguous write. The local receipt is not a firmwar
 ## Reporting
 
 State what was measured, what temporary adjustment was applied, whether save was acknowledged, and whether restart readback verified persistence. Keep these statuses distinct. Do not claim physical qualification based on automated tests alone.
+
+Use the before/after diagnostic rows to explain quiet peak, game deadzone candidate,
+circularity RMS, range symmetry and release peak independently. Changes are percentage
+points, not relative percentages. Missing data is unavailable, never zero. Do not
+infer an overall improvement or save approval from a lower circularity figure.
 ## Interpret repeated measurements
 
 Keep circularity, resting displacement, jitter, release overshoot and game deadzones

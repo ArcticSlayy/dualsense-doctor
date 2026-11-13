@@ -2,7 +2,7 @@
 
 This guide covers the optional calibration lifecycle controlled through `live_coach_control`. It is separate from guided measurements and the legacy gated recalibration command.
 
-**Qualification:** automated hardware-free checks only. No physical trial, save, restart, or readback has been performed. Independent review and controlled hardware qualification remain pending.
+**Qualification:** independently reviewed implementation with hardware-free checks and live read-only inspection. The new workflow has not yet had a controlled physical trial, save, restart, or persistence readback.
 
 ## Actions
 
@@ -16,6 +16,19 @@ This guide covers the optional calibration lifecycle controlled through `live_co
 The temporary trial is an adjustment in the controller's working state, not a software-only presentation change. Restarting before saving discards it.
 
 ## Evidence and limits
+
+The review shows five independent measurements for each stick: observed quiet peak,
+unapplied game deadzone candidate, circularity RMS, opposite-direction range
+difference, and post-return release peak. Before and after values use percent;
+changes use percentage points. Missing or incompatible evidence stays unavailable,
+including a withheld game deadzone candidate. This display does not approve a save
+or alter its evidence requirements.
+
+Lower circularity RMS is not automatically better. The
+[DualShock Tools fine-tune guide](https://github.com/dualshock-tools/dualshock-tools.github.io/blob/main/templates/finetune-modal.html)
+prioritizes a stock-like response and symmetry rather than an exact zero. Release
+peaks also depend on how the stick is moved. Compare consistent physical checks
+and review trade-offs before retaining an adjustment.
 
 The workflow records a local last-saved receipt. No firmware save timestamp is available through this workflow, so this is not a firmware timestamp. “Save acknowledged” reports the NVS operation response; it does not prove persistence. Only owner-confirmed restart followed by matching readback reaches the verified state. Do not automatically retry an ambiguous write.
 
