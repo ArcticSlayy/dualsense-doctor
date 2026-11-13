@@ -1,6 +1,6 @@
 # DualSense Doctor — MCP server
 
-Connect your **PS5 DualSense to Claude Code** (or any MCP client). Your Claude session can then read the controller and ask things like *"is my controller drifting?"* or *"set my triggers to a firm hair-trigger."* Runs locally over stdio — **no network, no telemetry.**
+Connect your **PS5 DualSense to Claude Code** (or any MCP client). Your Claude session can then read the controller and ask things like *"is my controller drifting?"* or *"set my triggers to a firm hair-trigger."* Runs locally over stdio. The optional live card starts an authenticated loopback relay; generated runtime files stay private.
 
 ## Install
 
@@ -57,7 +57,11 @@ Then just ask Claude:
 ## Safety
 
 - **`recalibrate_center` is not registered at all** unless you set `DUALSENSE_MCP_ALLOW_CALIBRATION=1`. Even then it is **USB-only**, requires `confirm="RECALIBRATE"`, and waits for the sticks to be untouched and still before sampling — so the AI can't casually trigger an NVS write or calibrate to a touched stick. A bad result is recoverable by re-running.
-- Every other tool is read-only or ephemeral. All inputs are validated and clamped.
-- Zero network calls. Two pinned dependencies (`node-hid`, `@modelcontextprotocol/sdk`) + `zod`.
+- Base measurement tools are read-only; lightbar and trigger effects are ephemeral. The optional `live_coach_control` adapter also exposes explicit reviewed calibration actions. See [the lifecycle contract](REVIEWED-CALIBRATION.md) before using them; they are separate from the legacy environment gate.
+- No remote service is required. Dependencies (`node-hid`, `@modelcontextprotocol/sdk`, `zod`) are pinned. The optional card uses localhost HTTP/SSE.
 
 The calibration protocol is reverse-engineered work by [dualshock-tools](https://github.com/dualshock-tools/dualshock-tools.github.io) (Paolo "the_al"). See the repo root for full credits and the bricking disclaimer.
+
+## Guided measurements and optional live card
+
+See [MCP coaching](COACHING.md), [the T3 card](T3-INTEGRATION.md), and [reviewed calibration](REVIEWED-CALIBRATION.md). Opening a card starts no measurement or calibration write. Save snapshot exports a privacy-filtered PNG of the display.

@@ -1,82 +1,93 @@
-# DualSense Doctor
+# DualSense Studio
 
-Diagnose and **actually fix** PS5 DualSense stick drift, tune the adaptive triggers, and control the light bar — all locally, in your browser or from the command line. Plus an **MCP server** so your Claude Code session can read and control the controller directly.
+A local toolkit for measuring DualSense stick input, reviewing calibration, and controlling temporary adaptive-trigger and light-bar effects. This fork keeps the upstream browser apps and CLI, and adds MCP coaching plus an optional live card.
 
-No installs to try it, no account, no telemetry. Your controller data never leaves your machine — **zero network calls.**
+![Synthetic example of the DualSense Studio live card](docs/media/dualsense-studio.png)
 
-```bash
-./serve.sh          # serves DualSense Studio on http://localhost:8777 and opens Chrome
-```
+*Illustrative synthetic data; this is not a live controller reading.*
 
-Requires **Chrome / Edge / Opera** for the web apps (WebHID). Works over USB *or* Bluetooth.
+[Upstream project](https://github.com/Sufxx/dualsense-doctor) · [MCP coaching](mcp/COACHING.md) · [Reviewed calibration](mcp/REVIEWED-CALIBRATION.md) · [Optional T3 card](mcp/T3-INTEGRATION.md) · [MIT license](LICENSE)
 
----
+## ✨ Features
 
-## What's in here
+- **Browser apps:** inspect live sticks, run drift and range diagnostics, and adjust adaptive triggers or the light bar with WebHID.
+- **CLI tools:** sample and monitor sticks with `dsdoctor.py`, or apply temporary trigger effects with `triggers.py`.
+- **MCP coaching:** capture guided, logged measurements; read saved reports; and compare up to ten compatible rounds. The optional card supports 1, 3, or 5-round targets. Game deadzone values are unapplied recommendations.
+- **Optional T3 live card:** view input and coaching progress, use an evidence-based checklist, create a PNG summary, and explicitly apply temporary effects. Feed and display rates are measured.
 
-| Part | What it does | How |
-|------|--------------|-----|
-| **Studio** (`studio.html`) | Triggers + lightbar + live sticks + drift recalibration, one page | WebHID (USB/BT) |
-| **Diagnostic** (`index.html`) | Deep drift diagnostic: rest / range / snapback tests, drift score, deadzone export, full recalibration | WebHID (USB/BT) |
-| **CLI** (`dsdoctor.py`, `triggers.py`) | AI-driven diagnose + recalibrate + trigger control from the terminal | Python + libhidapi |
-| **MCP server** (`mcp/`) | Lets a **Claude Code** session read/control your controller | node-hid + MCP SDK |
+Measurement, temporary calibration, and saved controller calibration are separate actions. Read the calibration guide before using calibration controls.
 
----
+## 🧭 Calibration lifecycle
 
-## Why DualSense sticks drift
+The optional live-coach calibration workflow is explicit and USB-only for a standard DualSense (not Edge), identified by its factory serial:
 
-Each stick uses two **ALPS Alpine carbon-film potentiometers** — a metal wiper scrubbing a printed carbon track. After ~2 million cycles the wiper wears the track, the resting voltage no longer lands at electrical center, and the firmware reports phantom input even when you're not touching the stick. That's drift. It's **mechanical wear, not a software bug** — and jitter is worst near center because the electrical tap is most sensitive there.
+1. **Check** the controller state and complete a baseline measurement.
+2. **Trial** a temporary center adjustment after a three-second hands-off countdown. This changes the controller's current working calibration state; it is not a software-only display filter and does not save to permanent calibration memory.
+3. **Retest** the same controller in the same session with a full measurement.
+4. **Save** only after reviewing the retest and explicitly approving the exact candidate. This unlocks and relocks NVS without issuing center or range calibration commands.
+5. **Restart and verify** only after the owner actually power-cycles the controller and confirms it. The check reads back the expected values.
 
-## What "fix" is actually possible (honest)
+Trial, save, and reboot each require an explicit action. Restarting before saving discards the temporary trial. A save acknowledgement is not proof of persistence: the app records a local receipt, and no firmware save timestamp is available through this workflow. The workflow does not guarantee zero drift or repair worn components.
 
-1. **On-controller recalibration** *(USB only — the real fix).* Rewrites the stick **center + range** into the controller's NVS flash, exactly like the PS5 does at the factory. Persists across reboots and travels back to the PS5. Fixes *electrical / center* drift at the root.
-2. **Software deadzone profile** *(any connection).* Computes the smallest deadzone that hides the measured drift; paste it into Steam / per-game. A mask, not a cure — and on macOS it can't apply system-wide on its own.
-3. **Hardware.** If the carbon track is physically worn, no calibration restores it. Contact cleaner under the cap buys time; the permanent cure is a contactless **Hall-effect / TMR replacement module** (e.g. Gulikit), which can't drift.
+The existing gated `recalibrate_center` command is unchanged. When enabled with `DUALSENSE_MCP_ALLOW_CALIBRATION=1`, it performs its own center recalibration and save in one operation. It is not a save-only step for the reviewed candidate. Generic measurement tools do not write calibration.
 
-Metric thresholds (raw 0–255, center 128): center offset **PASS < 6 / FAIL > 19**; jitter (σ) **PASS < 1.3 / FAIL > 2.5**.
+**Qualification:** automated hardware-free checks only. No physical trial, save, restart, or readback has been performed; independent review and controlled hardware qualification remain pending.
 
-## Adaptive triggers
+## 🖥️ Browser apps
 
-The Studio's Triggers tab (and `triggers.py`) drives the L2/R2 motors to create a firm **resistance wall early in the pull** — a "hair-trigger" feel that pushes back against your finger. Presets (off/light/firm/max/weapon) or custom wall position + strength.
+Use Chrome or Edge and connect a controller over a supported transport. From the repository root:
 
-> Trigger effects are **ephemeral** — they hold until a game changes them or the controller power-cycles. On a **PS5** the game overrides them, and software can't shorten physical travel; for a permanent short pull on PS5 you need a hardware trigger-stop or a DualSense Edge.
+~~~sh
+./serve.sh
+~~~
 
-## Connect it to Claude Code (MCP)
+Open the local address printed by the script. The Studio is at `/studio.html` and the diagnostic page at `/index.html`. Browser and transport support vary by operating system; see the [upstream instructions](https://github.com/Sufxx/dualsense-doctor).
 
-The `mcp/` server lets your Claude session read and control the controller:
+## 🔌 CLI
 
-```bash
-cd mcp && npm install
-claude mcp add dualsense -- node "$(pwd)/server.js"
-```
+The Python tools use the system HIDAPI library; installation details depend on the operating system.
 
-Then ask Claude: *"Is my controller drifting?"*, *"Set my triggers to firm,"* *"Make the lightbar purple."* See **[mcp/README.md](mcp/README.md)** for tools, `.mcp.json` config, and platform notes.
+~~~sh
+python3 dsdoctor.py
+python3 dsdoctor.py --monitor 10
+python3 triggers.py
+~~~
 
-## Safety
+`dsdoctor.py` samples or monitors input by default. Its legacy `--fix` option recalibrates and writes controller memory over USB; do not use it as the reviewed-candidate save step. Trigger effects are temporary and can be replaced by a game or reset on power-off.
 
-- **USB-only recalibration**, and it self-gates: it waits until the sticks are untouched and still before sampling, verifies every step's controller echo, and **aborts without writing** on any mismatch. The single NVS-commit step is confirmed against a known-good status before reporting success.
-- Writing to the controller's memory is inherently a **brick-risk** operation. A *soft* mis-calibration is recoverable by re-running. **Use at your own risk.** Keep battery > ~30% and don't unplug mid-save.
-- **DualSense Edge** (PID `0x0df2`) won't *persist* calibration without a hardware write-protect mod — the tools detect and warn.
-- In the MCP server, the recalibration tool is **disabled unless you explicitly opt in** (`DUALSENSE_MCP_ALLOW_CALIBRATION=1`) — an AI can't casually trigger an NVS write.
+## 🤖 MCP server
 
-## Privacy
+Requires Node.js 20 or newer. From `mcp/`, install dependencies:
 
-Everything runs locally. The web apps load no fonts, scripts, or assets from any CDN and make **no network requests**. The MCP server is stdio-only with no network access.
+~~~sh
+npm ci
+~~~
 
-## Layout
+Register with Claude Code, replacing the example with the repository's absolute path:
 
-```
-index.html / studio.html   WebHID apps          css/ js/   styles + modules
-dsdoctor.py                diagnose + recalibrate (USB)
-triggers.py                adaptive trigger control (USB)
-mcp/                       Claude Code MCP server (node-hid)
-serve.sh                   local server launcher
-```
+~~~sh
+claude mcp add dualsense -- node /absolute/path/to/dualsense-doctor/mcp/server.js
+~~~
 
-## Credits
+The MCP server uses stdio. Measurement tools read controller input and save local session evidence. `show_live_coach` prepares the optional card for a compatible T3 client; calibration controls are separate explicit actions on `live_coach_control`.
 
-The on-controller stick recalibration protocol (NVS unlock / calibrate / flash over HID) was reverse-engineered by **Paolo "the_al"** and the **[dualshock-tools](https://github.com/dualshock-tools/dualshock-tools.github.io)** project (MIT). This project re-implements that protocol independently with its own diagnostics, trigger, and MCP layers. Huge thanks to that work.
+Run hardware-free checks from `mcp/`:
 
-## License
+~~~sh
+npm test
+npm run smoke
+~~~
 
-[MIT](LICENSE) — free for anyone to use, modify, and build on.
+Automated checks do not establish physical accuracy or qualify controller writes.
+
+## 🔒 Privacy and safety
+
+Session reports and calibration receipts stay local. Keep session directories, generated card runtime files, and the local capability private. The optional card uses an authenticated loopback service; the core MCP connection uses stdio.
+
+Effects are sent only after an explicit Apply action. A sent command does not confirm the physical result; games or a power cycle can replace it. Disconnect the live card before using another HID tool that needs exclusive controller access.
+
+## 🙏 Credits
+
+The on-controller stick recalibration protocol (NVS unlock / calibrate / flash over HID) was reverse-engineered by **Paolo "the_al"** and the **[dualshock-tools](https://github.com/dualshock-tools/dualshock-tools.github.io)** project (MIT). The original project independently implemented the protocol; this fork adds coaching and reviewed workflow layers. Thanks to that work.
+
+The upstream browser apps and CLI remain part of this project. See the [upstream repository](https://github.com/Sufxx/dualsense-doctor) and [LICENSE](LICENSE).

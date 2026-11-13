@@ -1,70 +1,49 @@
 ---
 name: dualsense-tuneup
-description: Run repeatable DualSense stick checks and tune-ups through the DualSense Doctor MCP, with adaptive coaching, recorded measurements, and an optional interactive client card.
+description: Use when running repeatable DualSense stick checks, reviewing saved reports, or considering calibration actions through DualSense Studio MCP or its optional live card.
 ---
 
-## Begin a session
+# DualSense tune-up
 
-Use the installed MCP tools. Identify the intended controller with
-`list_controllers`; resume known session evidence with `list_sessions` and
-`session_report` when appropriate. Present the first physical instruction and
-begin one `run_guided_session` when the user starts. Relay meaningful progress
-and corrections rather than asking for readiness at every stage.
+Use the project's README and MCP guides for the installed build, available tools, and current qualification. Keep controller-specific identifiers and raw session files private.
 
-The local coach checks pace, direction, rim contact, settling, release evidence,
-and accidental stick movement. Advance from its evidence, not a guessed timer.
-Respect cancellation and incomplete results. A client may delay progress/logging
-notifications; describe that limit honestly rather than promising instant feedback.
-Use `start_session` and `capture_phase` for targeted repeats after explaining that
-phase's instruction. Record the adjustment being tested so comparisons have context.
+## Measurement
 
-## Interpret the result
+- Use `show_live_coach` when an interactive card is available; otherwise use generic guided measurement tools.
+- Start a check only when the user is ready to move the sticks. Follow prompts for rest, range, release, buttons, and final verification.
+- The card supports 1, 3, or 5 target rounds. Start each additional round only after the user explicitly chooses Repeat.
+- Read the session report. Compare only compatible sessions from the same controller, transport, and calibration history.
+- Explain that a deadzone candidate is an unapplied game-setting recommendation. Measurement does not guarantee zero drift or diagnose physical wear by itself.
 
-Keep circularity, resting displacement, jitter, snapback, and a game deadzone
-separate. The DualShock Tools guidance of roughly 7–9% RMS circularity resembles
-stock range; symmetry matters more than an exact target or a perfect zero. That
-guidance is not a universal optimum for every module or game. Preserve good range
-and small-input response while checking center consistency and repeated returns.
+## Calibration decisions
 
-Report what was observed, what is proposed, what was actually changed, and what
-was saved. Measurement completion does not mean the controller was calibrated or
-a game setting was applied. Keep software-deadzone candidates unapplied until a
-specific supported setting is changed and rechecked. After an external calibration
-change, start a new session or clearly separate before/after evidence.
+Use the reviewed calibration lifecycle only through optional `live_coach_control` actions, when available:
 
-For repeated checks, compare complete saved rounds with `compare_sessions`.
-The repeated-round starting deadzone covers the worst valid quiet peak plus one
-percentage point, rounded up; it differs from a single report's p99 estimate.
-Never select only the best run or interpret repetition as firmware improvement.
-Use the same controller, connection type and unchanged setup. Begin a new
-comparison after any external calibration or game/input-layer change. Report
-circularity and release overshoot separately; do not promise zero future drift.
+1. Inspect and complete a baseline check.
+2. Require an explicit decision for a temporary center trial; the corresponding card button is that decision. The three-second hands-off countdown is part of the action. This changes the controller's working calibration state; it is not software-only.
+3. Complete the full retest in the same session and review before/after evidence.
+4. Require a separate explicit decision to save the exact reviewed candidate; the card confirmation satisfies it. A successful measurement is not save approval.
+5. Treat a save acknowledgement as unverified persistence. Ask the owner to actually restart or power-cycle the controller, then confirm the restart before readback verification.
 
-Controller-memory calibration is a separate opt-in operation. This skill does not
-enable it or grant permission to save permanently. Use only available, validated
-calibration tools with a deliberate decision on the reviewed result; retain the
-server's NVS gates and do not turn a general tune-up request into an automatic
-firmware write. Never describe synthetic tests as hardware qualification.
+Never automatically retry an ambiguous write. The local receipt is not a firmware save timestamp. The existing gated `recalibrate_center` command recalibrates and saves in one operation; it is not a save-only shortcut. Generic measurement tools do not write calibration.
 
-## Optional interactive client
+## Reporting
 
-If the T3 adapter tools and HTML rendering are available, `show_live_coach` returns
-an HTML path for that client's preview and render tools. Otherwise keep the generic
-MCP coaching workflow. The actual desktop card and its preview renderer may have
-different network access; test the target client rather than assuming either works.
-Use the card's single Start and Pause/Resume/Stop controls when supported. Display
-preferences affect the view, not the underlying measurement or controller settings.
-During a check, use the per-stick cue and actual outer-edge coverage to explain
-what to adjust. Preparation countdowns are separate from evidence progress: a timer
-reaching zero never proves a movement passed. Progress notifications carry fresh
-corrections; relay meaningful cue changes without narrating every sample. Report
-render FPS and received input Hz separately, without promising measured latency.
-The optional card offers 1/3/5-round targets; Repeat starts a round only when
-pressed. A new comparison or disconnect clears the live comparison, while saved
-session logs remain available for later `compare_sessions` calls. Lightbar Apply
-works before a test when connected; its effect is not saved in controller memory.
+State what was measured, what temporary adjustment was applied, whether save was acknowledged, and whether restart readback verified persistence. Keep these statuses distinct. Do not claim physical qualification based on automated tests alone.
+## Interpret repeated measurements
 
-Session logs, device identities, generated capability-bearing HTML, and runtime
-files stay private. Share only selected generic code or synthetic examples when
-reporting a bug. Repository users can consult `mcp/COACHING.md`; the optional adapter
-has additional notes in `mcp/T3-INTEGRATION.md` when that layer is installed.
+Keep circularity, resting displacement, jitter, release overshoot and game deadzones
+separate. DualShock Tools' roughly 7–9% RMS circularity guidance resembles stock
+range; symmetry matters more than chasing zero, and it is not a universal optimum
+for every module or game. Preserve useful range and small-input response.
+
+Repeated-round recommendations cover the worst valid quiet peak plus one percentage
+point, rounded up. Do not select only the best run or treat repeated measurements as
+firmware training. Use a new comparison after external calibration or input-layer
+changes. Saved reports remain available; continuous in-progress sessions need not
+resume across process restarts.
+
+Relay meaningful pace, direction, rim-contact and settling corrections without
+asking for readiness at every stage. Countdown completion does not prove movement
+passed. MCP clients may delay progress/log delivery; rendered FPS and input-feed Hz
+are different measurements and neither establishes end-to-end latency.
