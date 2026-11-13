@@ -1,10 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCoachServer, CoachHost, batteryFromReport } from '../coach-host.js';
+import {mkdtemp,readFile,readdir,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 function savedRound(id,peak=2) {
   return {id,complete:true,controller:{productId:3302,path:'fixture'},captures:['rest','range','release','buttons','verify'].map((phase,i)=>({number:i+1,phase,metrics:{valid:true,mode:'usb',samples:250,durationMs:5000,maxGapMs:20,left:{valid:true,peakRadiusPercent:peak,p99RadiusPercent:peak},right:{valid:true,peakRadiusPercent:peak,p99RadiusPercent:peak}}}))};
 }
+
+test('optional rendering timings are bounded, validated and compatible with old cards',async()=>{
+ const host={snapshot(){return{};},disconnect(){}},app=createCoachServer({host,port:0,token:'a'.repeat(64)}),addr=await app.listen();
+ const base=`http://127.0.0.1:${addr.port}`,send=m=>fetch(base+'/metrics?token='+app.token,{method:'POST',body:JSON.stringify(m)});
+ try{const basic={fps:144,receiveHz:125,clientAgeMs:1};assert.equal((await send(basic)).status,200);assert.equal(host.clientMetrics.frameGapP95Ms,undefined);
+ assert.equal((await send({...basic,frameGapP95Ms:7,frameGapMaxMs:70000,frameGapsOver50Ms:999,freshPlotFrames:10000,timingSamples:240,frameWorkP95Ms:.2,frameWorkMaxMs:1,privatePath:'SECRET'})).status,200);
+ assert.equal(host.clientMetrics.frameGapMaxMs,60000);assert.equal(host.clientMetrics.frameGapsOver50Ms,239);assert.equal(host.clientMetrics.timingSamples,240);assert.ok(!JSON.stringify(host.clientMetrics).includes('SECRET'));
+ for(const value of ['7',-1,null])assert.equal((await send({...basic,frameGapP95Ms:value})).status,400);
+ assert.equal((await send({...basic,timingSamples:1.2})).status,400);
+ assert.equal((await fetch(base+'/history')).status,403);assert.equal((await fetch(base+'/history?token='+app.token)).status,200);
+ }finally{await app.close();}
+});
+
+test('explicit trigger capture reserves controls but sends no controller writes',async()=>{
+ const host=new CoachHost({}),calls=[];host.c={info:{productId:0x0ce6},close(){calls.push('close');},applyLightbar(){calls.push('light');},applyTriggers(){calls.push('effect');}};host.latest={mode:'usb',lx:128,ly:128,rx:128,ry:128,l2:0,r2:0};host.lastAt=performance.now();
+ await host.control('trigger_check_start');assert.equal(host.triggerCheckActive(),true);assert.equal(host.calibrationState().actions.inspect,false);
+ for(const action of ['start','resume','lightbar','triggers','calibration_inspect','calibration_save','calibration_reboot'])await assert.rejects(host.control(action),/Finish or cancel/);
+ assert.deepEqual(calls,[]);await host.control('trigger_check_stop');assert.equal(host.triggerCheckActive(),false);assert.equal(host.snapshot().triggerCheck.status,'cancelled');assert.deepEqual(calls,[]);
+ host.status='paused';await assert.rejects(host.control('trigger_check_start'),/Finish or stop/);host.status='idle';host.calibrationRequiresRestart=true;await assert.rejects(host.control('trigger_check_start'),/restart/);
+ host.calibrationRequiresRestart=false;await host.control('trigger_check_start');host.disconnect();assert.equal(host.snapshot().triggerCheck.status,'cancelled');assert.deepEqual(calls,['close']);
+});
+
+test('completed trigger observations persist locally without session identity or calibration changes',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'trigger-host-'));
+ try{const host=new CoachHost({root}),save=host.triggerCheck._saveReport;let done;const saved=new Promise(resolve=>{done=resolve;});host.triggerCheck._saveReport=async(...args)=>{await save(...args);done();};
+ const started=performance.now();host.triggerCheck.start(started);
+ for(let elapsed=20;elapsed<=15000;elapsed+=20){const t=Math.max(0,elapsed-3000),phase=t%4000,value=Math.round((phase<2000?phase:4000-phase)/2000*255);host.triggerCheck.feed({mode:'usb',l2:value,r2:value},started+elapsed);}
+ await saved;await Promise.resolve();const files=await readdir(join(root,'trigger-checks'));assert.equal(files.length,1);assert.match(files[0],/\.json$/);
+ const report=JSON.parse(await readFile(join(root,'trigger-checks',files[0]),'utf8'));assert.equal(report.kind,'trigger-check');assert.equal(report.analysis.quality.available,true);assert.ok(report.analysis.triggers.l2.cycles.slowSweeps>=2);assert.equal(report.controller,undefined);assert.equal(report.calibration,undefined);
+ assert.equal(host.triggerCheck.snapshot().status,'complete');assert.equal(host.result,undefined);assert.equal(host.roundReports.length,0);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('completed rounds accumulate conservatively without automatically starting another run',async()=>{
   const host=new CoachHost({});host.roundTarget=5;
   for(let i=0;i<5;i++)host.rememberRound(savedRound('round-'+i,2+i/2));

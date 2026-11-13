@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { mkdir, writeFile, rename, unlink } from 'node:fs/promises';
 import { Controller, parseSticks, listControllers, TRIGGER_PRESETS, effFeedback } from './hid/dualsense.js';
 import { SessionStore } from './guided.js';
 import { runGuided, RUN_STEPS } from './coach-runner.js';
@@ -8,6 +9,8 @@ import { join } from 'node:path';
 import { CalibrationWorkflow } from './calibration-workflow.js';
 import { runCalibrationWorker } from './calibration-worker.js';
 import { startFeedClock } from './feed-clock.js';
+import { readSessionHistory } from './session-insights.js';
+import { TriggerCheck } from './trigger-check.js';
 
 // Sony's battery nibble reports 10% intervals; use midpoint estimates except full.
 export function batteryFromReport(buf,mode) {
@@ -28,14 +31,22 @@ export class CoachHost {
     this.calibrationWorker=worker;this.wait=wait;this.enableCalibration=enableCalibration;
     this.calibrationOperation=null;this.calibrationCountdownUntil=0;this.calibrationRequiresRestart=this.calibrationWorkflow?.needsRestart?.()||false;
     this.calibrationInspectionPending=true;this.calibrationControllerPath=null;
+    this.triggerCheck=new TriggerCheck({saveReport:async(report,{isCurrent})=>{
+      if(!this.store.root)throw Error('Session storage unavailable.');
+      const directory=join(this.store.root,'trigger-checks'),id=randomUUID(),temporary=join(directory,id+'.tmp'),destination=join(directory,id+'.json');
+      await mkdir(directory,{recursive:true});
+      try{await writeFile(temporary,JSON.stringify({...report,created:new Date().toISOString()},null,2),{flag:'wx'});if(!isCurrent())return;await rename(temporary,destination);}
+      finally{await unlink(temporary).catch(()=>{});}
+    }});
   }
+  triggerCheckActive(){return this.triggerCheck.active;}
   calibrationState() {
     let state=this.calibrationWorkflow?.snapshot()??{stage:'unknown',message:'Calibration workflow is unavailable.',lastSavedAt:null,verifiedAt:null,firmwareSaveTimestamp:null,historySource:'this_app'};
     if(this.calibrationInspectionPending){
       state={...state,lastSavedAt:null,verifiedAt:null,reviewId:null,comparison:null,diagnostics:null};
       if(!this.calibrationRequiresRestart)state={...state,stage:'unknown',message:'Inspect calibration history for this connection before using saved status.'};
     }
-    const busy=!!this.calibrationOperation,idle=!busy&&!this.run&&!['running','paused'].includes(this.status);
+    const busy=!!this.calibrationOperation,idle=!busy&&!this.run&&!this.triggerCheckActive()&&!['running','paused'].includes(this.status);
     const fresh=!!this.c&&!!this.latest&&performance.now()-this.lastAt<300;
     const standard=fresh&&this.latest.mode==='usb'&&this.c.info.productId===0x0ce6;
     const ready=idle&&this.enableCalibration&&!!this.calibrationWorkflow;
@@ -176,14 +187,16 @@ export class CoachHost {
       const f=parseSticks(buf);if(!f)return;
       this.battery=batteryFromReport(buf,f.mode);
       this.latest=f;this.lastAt=performance.now();c._mode=f.mode;this.sequence++;this.inputCount++;
+      if(this.triggerCheckActive())this.triggerCheck.feed(f,this.lastAt);
       if(this.lastAt-this.rateAt>=1000){this.inputHz=Math.round(this.inputCount*1000/(this.lastAt-this.rateAt));this.inputCount=0;this.rateAt=this.lastAt;}
       if(this.run){this.queue.push({s:f});if(this.queue.length>250)this.queue.shift();}
     });
     c.dev.on('error',e=>{if(this.c!==c)return;this.warning=`Controller input lost: ${e.message}`;this.disconnect();this.status='error';});
     this.instruction='Live view connected. Start once; follow the changing instructions.';
   }
-  disconnect(){this.calibrationInspectionPending=true;this.result=null;this.abort?.abort();const c=this.c;this.c=null;c?.close();this.latest=null;this.queue=[];this.battery=null;this.firmware=null;this.effects={lightbar:null,triggers:null};this.clearRounds();if(this.status==='running')this.status='paused';}
+  disconnect(){this.triggerCheck.cancel('disconnected');this.calibrationInspectionPending=true;this.result=null;this.abort?.abort();const c=this.c;this.c=null;c?.close();this.latest=null;this.queue=[];this.battery=null;this.firmware=null;this.effects={lightbar:null,triggers:null};this.clearRounds();if(this.status==='running')this.status='paused';}
   async launch(resume=false,roundTarget=this.roundTarget,retest=false) {
+    if(this.triggerCheckActive())throw Error('Finish or cancel the trigger input check first.');
     if(this.run)throw Error('A guided check is already running.');
     if(![1,3,5].includes(roundTarget))throw Error('Choose 1, 3, or 5 comparison rounds.');
     if(!resume&&this.roundReports.length>=10)throw Error('Ten rounds are saved. Start a new comparison to continue.');
@@ -206,6 +219,14 @@ export class CoachHost {
   }
   async control(action,input={}) {
     if(this.calibrationOperation)throw Error('A controller operation is in progress. Wait for its result.');
+    if(this.triggerCheckActive())this.triggerCheck.poll(performance.now());
+    if(this.triggerCheckActive()&&!['trigger_check_stop','disconnect'].includes(action))throw Error('Finish or cancel the trigger input check first.');
+    if(action==='trigger_check_start'){
+      if(this.run||['running','paused'].includes(this.status)||this.calibrationRequiresRestart)throw Error('Finish or stop the stick check and resolve any required restart first.');
+      if(!this.c||!this.latest||performance.now()-this.lastAt>300)throw Error('Connect the controller and wait for fresh input.');
+      this.triggerCheck.start();return this.snapshot();
+    }
+    if(action==='trigger_check_stop'){this.triggerCheck.cancel();return this.snapshot();}
     if(action.startsWith('calibration_'))return this.calibrationAction(action,input);
     if(action==='connect')this.connect();
     else if(action==='disconnect'){this.disconnect();this.status='idle';}
@@ -239,6 +260,7 @@ export class CoachHost {
     return this.snapshot();
   }
   snapshot() {
+    if(this.triggerCheckActive())this.triggerCheck.poll(performance.now());
     const ageMs=this.lastAt?performance.now()-this.lastAt:null;
     const active=['running','paused'].includes(this.status),step=active?RUN_STEPS[this.currentIndex]:null;
     const preparing=this.status==='running'&&this.prepareUntil>performance.now();
@@ -246,7 +268,7 @@ export class CoachHost {
     const labels=['Rest','Clockwise','Counterclockwise','Release','Buttons','Verify'];
     return {connected:!!this.c,status:this.status,latest:ageMs!==null&&ageMs<300?this.latest:null,ageMs,sequence:this.sequence,inputHz:this.inputHz,publishHz:125,clientMetrics:this.clientMetrics||null,battery:this.battery,firmware:this.firmware,effects:this.effects,controller:this.c?{product:this.c.info.product,productId:this.c.info.productId}:null,
       phase:step?.phase||null,direction:step?.direction||null,phaseProgress:this.phaseProgress||0,preparing,prepareSecondsRemaining,prepareDurationSeconds:this.prepareDurationSeconds||0,
-      measurements:this.measurements,
+      measurements:this.measurements,triggerCheck:this.triggerCheck.snapshot(),
       calibration:this.calibrationState(),
       instruction:this.instruction,warning:this.warning,progress:this.progress,secondsRemaining:active?(preparing?Math.ceil(prepareSecondsRemaining):this.secondsRemaining??null):null,details:active?(this.details||{}):{},sessionId:this.sessionId||null,result:this.result?{complete:this.result.complete,logPath:this.result.report?.logPath,reason:this.result.reason}:null,events:this.events,
       stepIndex:this.currentIndex,steps:RUN_STEPS.map((s,i)=>({id:s.direction?`range-${s.direction}`:s.phase,label:labels[i],status:this.completedSteps.has(i)?'complete':i===this.currentIndex&&['running','paused'].includes(this.status)?'current':'pending'}))};
@@ -255,6 +277,7 @@ export class CoachHost {
 
 export function createCoachServer({host=new CoachHost(),port=27892,token=randomBytes(32).toString('hex')}={}) {
   const clients=new Set();
+  let historyPending=null;
   const server=http.createServer(async(req,res)=>{
     res.setHeader('Access-Control-Allow-Origin','*');
     res.setHeader('Access-Control-Allow-Private-Network','true');
@@ -273,10 +296,17 @@ export function createCoachServer({host=new CoachHost(),port=27892,token=randomB
     }
     res.setHeader('Content-Type','application/json');
     if(req.method==='POST'&&url.pathname==='/metrics'){
-      try{let body='';for await(const chunk of req){body+=chunk;if(body.length>512)throw Error('Too large');}const m=JSON.parse(body);
+      try{let body='';for await(const chunk of req){body+=chunk;if(body.length>2048)throw Error('Too large');}const m=JSON.parse(body);
         if(!['fps','receiveHz','clientAgeMs'].every(k=>Number.isFinite(m[k])&&m[k]>=0))throw Error('Invalid metrics');
-        host.clientMetrics={fps:Math.min(240,m.fps),receiveHz:Math.min(500,m.receiveHz),clientAgeMs:Math.min(60000,m.clientAgeMs),at:new Date().toISOString()};res.end('{"ok":true}');
+        const optional={};for(const [key,max,integer] of [['frameGapP95Ms',60000],['frameGapMaxMs',60000],['frameWorkP95Ms',60000],['frameWorkMaxMs',60000],['frameGapsOver50Ms',239,true],['freshPlotFrames',Number.MAX_SAFE_INTEGER,true],['timingSamples',240,true]]){
+          if(m[key]===undefined)continue;if(!Number.isFinite(m[key])||m[key]<0||(integer&&!Number.isInteger(m[key])))throw Error('Invalid metrics');optional[key]=Math.min(max,m[key]);
+        }
+        host.clientMetrics={fps:Math.min(1000,m.fps),receiveHz:Math.min(500,m.receiveHz),clientAgeMs:Math.min(60000,m.clientAgeMs),...optional,at:new Date().toISOString()};res.end('{"ok":true}');
       }catch{res.writeHead(400);res.end('{"error":"Invalid metrics"}');}return;
+    }
+    if(req.method==='GET'&&url.pathname==='/history'){
+      try{historyPending??=readSessionHistory(host.store).finally(()=>{historyPending=null;});res.end(JSON.stringify(await historyPending));}
+      catch{res.writeHead(503);res.end('{"error":"Saved checks are unavailable."}');}return;
     }
     if(req.method==='GET'&&url.pathname==='/state'){res.end(JSON.stringify(host.snapshot()));return;}
     if(req.method==='POST'&&url.pathname==='/control'){
