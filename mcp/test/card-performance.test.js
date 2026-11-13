@@ -231,7 +231,7 @@ test('feed bursts defer guidance and metadata DOM writes to one frame',()=>{
 
 test('preparation countdown drains smoothly but never starts a phase without server evidence',()=>{
  const run=setup(),s=run.input();Object.assign(s,{status:'running',phase:'range',direction:'clockwise',preparing:true,prepareSecondsRemaining:3,prepareDurationSeconds:3});run.accept(s);
- assert.equal(run.nodes.get('timer').textContent,'3');assert.equal(run.nodes.get('timer-label').textContent,'Get ready');
+ assert.equal(run.nodes.get('timer').textContent,'3');assert.equal(run.nodes.get('timer-label').textContent,'Starting in');
  const before=run.nodes.get('timer-ring').attributes['stroke-dashoffset'];run.step(100);assert.notEqual(run.nodes.get('timer-ring').attributes['stroke-dashoffset'],before);
  for(let i=0;i<4;i++){s.prepareSecondsRemaining=0;run.accept(s);run.step(20);}
  assert.equal(run.nodes.get('timer').textContent,'…');assert.equal(run.nodes.get('timer-label').textContent,'Waiting');
@@ -267,9 +267,9 @@ test('reduced motion countdown uses discrete ring steps',()=>{
 });
 
 
-test('all customization options share one disclosure with named groups',()=>{
- assert.equal([...html.matchAll(/<details\b[^>]*id="controller-controls"/g)].length,1);
- const panel=html.match(/<details\b[^>]*id="controller-controls"[\s\S]*?<\/details>/)[0];
+test('controller options have one direct view with named groups',()=>{
+ assert.equal([...html.matchAll(/<section\b[^>]*id="controller-controls"/g)].length,1);
+ const panel=html.slice(html.indexOf('<section class="options controller-controls"'));
  for(const id of ['trail-mode','view-mode','number-units','center-rings','show-rates','clear-trail','lightbar-hex','lightbar-apply','trigger-preset','trigger-apply'])assert.ok(panel.includes('id="'+id+'"'),id);
  assert.match(panel,/Live view/);assert.match(panel,/Lightbar/);assert.match(panel,/Adaptive triggers/);
 });
@@ -307,18 +307,21 @@ const measuredRounds=()=>({targetRounds:5,rounds:Array.from({length:5},(_,i)=>({
 test('complete repeat measurements show conservative server candidates and a round comparison',()=>{
  const run=setup();run.accept({...run.input(),status:'complete',measurements:measuredRounds()});
  assert.equal(run.nodes.get('results').hidden,false);assert.equal(run.nodes.get('left-deadzone').textContent,'7%');assert.equal(run.nodes.get('right-deadzone').textContent,'8%');
- assert.match(run.nodes.get('left-circularity').textContent,/7.5%/);assert.match(run.nodes.get('round-status').textContent,/5 \/ 5 comparable/);
+ assert.match(run.nodes.get('left-circularity').textContent,/7.5%/);assert.match(run.nodes.get('round-status').textContent,/5 of 5 compatible/);
  assert.equal(run.nodes.get('round-history').hidden,false);assert.equal(run.nodes.get('round-4-left').textContent,'7%');assert.equal(run.nodes.get('round-5').hidden,true);
- assert.equal(run.nodes.get('round-4-right-bar').style.width,'100%');assert.match(run.nodes.get('results-note').textContent,/No settings applied/);
+ assert.equal(run.nodes.get('round-4-right-bar').style.width,'100%');assert.match(run.nodes.get('results-note').textContent,/not values applied by this app/);
  assert.ok(!run.requests.some(r=>r.url.includes('/control')));
 });
 
-test('unavailable or incompatible measurements never become zero-deadzone claims',()=>{
+test('incompatible series retains latest observations without inventing a pooled recommendation',()=>{
  const run=setup();run.accept(run.input());assert.equal(run.nodes.get('results').hidden,true);
- const data=measuredRounds();data.comparison.comparable=false;data.comparison.reason='Transport changed; start a new comparison.';
- run.accept({...run.input(),measurements:data});assert.equal(run.nodes.get('left-deadzone').textContent,'Unavailable');assert.equal(run.nodes.get('round-history').hidden,true);assert.match(run.nodes.get('results-summary').textContent,/Transport changed/);
- data.comparison.comparable=true;data.comparison.left.circularity={min:null,max:null,latest:null};data.comparison.left.suggestedDeadzonePercent=null;
- run.accept({...run.input(),measurements:data});assert.equal(run.nodes.get('left-deadzone').textContent,'Unavailable');assert.match(run.nodes.get('left-circularity').textContent,/full outer-edge coverage/);
+ const data=measuredRounds();data.comparison.comparable=false;data.comparison.reason='PRIVATE_REASON';
+ run.accept({...run.input(),status:'complete',measurements:data});assert.equal(run.nodes.get('left-deadzone').textContent,'7%');assert.equal(run.nodes.get('round-history').hidden,true);assert.match(run.nodes.get('comparison-explainer').textContent,/not combined.*latest result/i);
+ assert.doesNotMatch(run.nodes.get('comparison-explainer').textContent,/PRIVATE_/);
+ data.latestComparison={comparable:false,acceptedRounds:0,left:null,right:null};
+ run.accept({...run.input(),status:'complete',measurements:data});assert.equal(run.nodes.get('results').hidden,true);assert.equal(run.nodes.get('left-deadzone').textContent,'Unavailable');
+ data.latestComparison={comparable:true,acceptedRounds:1,left:{observedPeakPercent:.79,suggestedDeadzonePercent:null,circularity:{latest:null}},right:{observedPeakPercent:.79,suggestedDeadzonePercent:2}};
+ run.accept({...run.input(),status:'complete',measurements:data});assert.equal(run.nodes.get('left-deadzone').textContent,'Unavailable');assert.match(run.nodes.get('left-circularity').textContent,/full outer-edge coverage/);
 });
 
 test('round goal selection stays local until an explicit start or repeat',()=>{
@@ -340,10 +343,10 @@ const controlCommands=run=>run.requests.filter(r=>r.url.includes('/control')).ma
 
 test('calibration stages reflect server evidence and never send an automatic command',()=>{
  const run=setup();
- for(const [stage,expected] of [['measured','Measured · unchanged'],['trial_applied','Temporary adjustment · unsaved'],['ready_to_save','Retested · review before saving'],['save_acknowledged','Save acknowledged · restart verification needed'],['verified','Verified after restart'],['ambiguous','Verification inconclusive'],['changed','Calibration changed'],['unknown','Start with a check']]){
+ for(const [stage,expected] of [['measured','This check measured input only'],['trial_applied','Temporary adjustment · unsaved'],['ready_to_save','Retested · review before saving'],['save_acknowledged','Save acknowledged · restart verification needed'],['verified','Matched after your confirmed restart'],['ambiguous','Verification inconclusive'],['changed','Calibration changed'],['unknown','Start with a check']]){
   run.accept({...run.input(),status:'complete',calibration:calibrationState(stage)});
   assert.equal(run.nodes.get('calibration-stage').textContent,expected);
-  assert.equal(run.nodes.get('calibration-message').textContent,'Server calibration state: '+stage);
+  assert.equal(run.nodes.get('calibration-message').textContent,stage==='measured'?'Baseline recorded. A center adjustment is optional.':'Server calibration state: '+stage);
   assert.equal(run.nodes.get('calibration-save').disabled,stage!=='ready_to_save');
   assert.equal(run.nodes.get('calibration-retest').disabled,stage!=='trial_applied');
   assert.equal(run.nodes.get('calibration-trial').disabled,stage!=='measured');
@@ -362,7 +365,7 @@ test('temporary trial is explicit and its hands-off countdown follows server evi
  assert.deepEqual(controlCommands(run),[{confirm:'TRY_TEMPORARY_CENTER',action:'calibration_trial'}]);
  const countdown=setup();countdown.accept({...countdown.input(),latest:null,calibration:calibrationState('measured',{busy:true,operation:'temporary center adjustment',countdownSeconds:3})});
  assert.match(countdown.nodes.get('calibration-message').textContent,/Hands off both sticks · 3s/);
- countdown.step(3500);assert.match(countdown.nodes.get('calibration-stage').textContent,/Measured/);assert.deepEqual(controlCommands(countdown),[]);
+ countdown.step(3500);assert.match(countdown.nodes.get('calibration-stage').textContent,/measured input only/);assert.deepEqual(controlCommands(countdown),[]);
 });
 
 test('save requires inline review confirmation and sends the server reviewId once',()=>{
@@ -447,7 +450,7 @@ test('snapshot export is explicit, display-only, and creates a PNG download with
 test('snapshot report excludes private state, URLs, session paths, serial numbers and arbitrary messages',()=>{
  const run=setup(),s=run.input();Object.assign(s,{sessionId:'PRIVATE_SESSION',token:'PRIVATE_TOKEN',url:'https://PRIVATE_URL/',instruction:'PRIVATE_INSTRUCTION',path:'/private/PRIVATE_PATH',controller:{serialNumber:'PRIVATE_SERIAL'},firmware:{build:'PRIVATE_BUILD'},calibration:calibrationState('verified',{message:'PRIVATE_CALIBRATION_MESSAGE',lastSavedAt:'PRIVATE_DATE',reviewId:'PRIVATE_REVIEW'})});
  run.accept(s);run.click('snapshot');const rendered=run.canvasWrites.map(([value])=>value).join(' ');
- assert.doesNotMatch(rendered,/PRIVATE_|test-token|127\.0\.0\.1|https?:|\/private\/|review-123/);assert.match(rendered,/Verified after restart/);assert.deepEqual(controlCommands(run),[]);
+ assert.doesNotMatch(rendered,/PRIVATE_|test-token|127\.0\.0\.1|https?:|\/private\/|review-123/);assert.match(rendered,/Matched after your confirmed restart/);assert.deepEqual(controlCommands(run),[]);
  run.step(301);run.click('snapshot');assert.ok(run.canvasWrites.some(([value])=>/Last received input, stale/.test(value)));
 });
 
@@ -618,4 +621,67 @@ test('calibration history is disclosed separately while review and confirmation 
  const run=setup(),s=run.input();s.calibration={stage:'ready_to_save',reviewId:'review',actions:{save:true}};run.accept(s);
  assert.equal(run.nodes.get('calibration-save').hidden,false);run.click('calibration-save');assert.equal(run.nodes.get('calibration-confirm').hidden,false);
  assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+});
+
+
+test('hands-off phases dominate the instruction and never infer completion from a timer',()=>{
+ const run=setup(),s=run.input();s.status='running';s.phase='rest';s.instruction='Leave BOTH sticks untouched.';s.secondsRemaining=3;run.accept(s);
+ assert.equal(run.nodes.get('instruction').textContent,'Keep both sticks untouched');assert.match(run.nodes.get('instruction-detail').textContent,/Measuring the resting position/);assert.equal(run.nodes.get('timer-label').textContent,'Hands off');
+ assert.equal(run.nodes.get('guidance-panel').dataset.handsOff,'true');assert.equal(run.nodes.get('start').hidden,true);assert.equal(run.nodes.get('round-options').hidden,true);
+ s.preparing=true;s.prepareSecondsRemaining=3;s.prepareDurationSeconds=3;run.accept(s);assert.match(run.nodes.get('instruction-detail').textContent,/quiet measurement.*countdown/);
+ run.step(4000);assert.equal(run.nodes.get('step-rest').dataset.status,'pending');assert.deepEqual(controlCommands(run),[]);
+});
+
+test('latest near-center result explains game guidance and does not encourage another trial',()=>{
+ const run=setup(),data=measuredRounds();data.latestComparison={comparable:true,acceptedRounds:1,left:measuredSide(.79,2),right:measuredSide(.79,2)};data.comparison={...data.latestComparison};data.seriesReset=true;
+ run.accept({...run.input(),status:'complete',measurements:data,calibration:calibrationState('measured',{comparison:{before:data.latestComparison,after:null}})});
+ assert.match(run.nodes.get('results-summary').textContent,/left 0.79%.*right 0.79%/);assert.match(run.nodes.get('results-next').textContent,/keep the current calibration/);
+ assert.match(run.nodes.get('comparison-explainer').textContent,/fresh comparison.*Earlier checks remain saved/);
+ assert.notEqual(run.nodes.get('calibration-trial').attributes.class,'primary');assert.equal(run.nodes.get('calibration-comparison').hidden,true);assert.deepEqual(controlCommands(run),[]);
+ assert.ok(html.indexOf('id="results"')<html.indexOf('id="calibration"'));assert.ok(html.indexOf('id="calibration"')<html.indexOf('class="live-panel"'));
+ assert.equal(run.nodes.get('start').hidden,true);assert.equal(run.nodes.get('round-options').hidden,false);assert.equal(run.nodes.get('guidance-panel').dataset.complete,'true');
+});
+
+test('result guidance distinguishes a temporary retest from saved and restart-confirmed values',()=>{
+ for(const [stage,expected] of [['ready_to_save',/temporary adjustment.*retest/],['save_acknowledged',/Fully restart/],['verified',/after your restart confirmation/],['ambiguous',/uncertain/]]){
+  const run=setup();run.accept({...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState(stage)});
+  assert.match(run.nodes.get('results-next').textContent,expected);assert.deepEqual(controlCommands(run),[]);
+ }
+});
+
+
+test('views follow workflow transitions once and never dispatch controller commands',()=>{
+ const run=setup(),s=run.input();run.accept(s);assert.equal(run.nodes.get('studio').dataset.view,'check');
+ run.click('nav-controller');run.accept({...s});assert.equal(run.nodes.get('studio').dataset.view,'controller');
+ run.accept({...s,status:'running',phase:'range'});assert.equal(run.nodes.get('studio').dataset.view,'check');
+ run.click('nav-controller');run.accept({...s,status:'running',phase:'range',phaseProgress:.8});assert.equal(run.nodes.get('studio').dataset.view,'controller');
+ run.accept({...s,status:'complete',measurements:measuredRounds()});assert.equal(run.nodes.get('studio').dataset.view,'results');
+ run.click('nav-check');run.accept({...s,status:'complete',measurements:measuredRounds()});assert.equal(run.nodes.get('studio').dataset.view,'check');
+ assert.equal(run.nodes.get('nav-check').attributes['aria-pressed'],'true');assert.deepEqual(controlCommands(run),[]);
+});
+
+test('direction preparation explicitly stops turning and never says go before server advancement',()=>{
+ const run=setup(),s={...run.input(),status:'running',phase:'range',direction:'counterclockwise',preparing:true,prepareSecondsRemaining:3,prepareDurationSeconds:3};run.accept(s);
+ assert.equal(run.nodes.get('instruction').textContent,'Stop turning — hands off');assert.match(run.nodes.get('instruction-detail').textContent,/Get ready: counterclockwise.*Wait for the instruction to change/);
+ assert.equal(run.nodes.get('timer-label').textContent,'Starting in');run.step(3200);assert.doesNotMatch(run.nodes.get('instruction').textContent,/Turn both sticks/);
+ run.accept({...s,preparing:false});assert.equal(run.nodes.get('instruction').textContent,'Turn both sticks counterclockwise');assert.match(run.nodes.get('instruction-detail').textContent,/until the instruction changes/);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('unavailable large-movement recommendation gives evidence guidance instead of prescribing it',()=>{
+ const run=setup(),side={...measuredSide(25,null),reliable:false},summary={comparable:true,acceptedRounds:1,left:side,right:side};
+ run.accept({...run.input(),status:'complete',measurements:{comparison:summary,latestComparison:summary,rounds:[{complete:true,left:side,right:side}]}});
+ assert.equal(run.nodes.get('left-deadzone').textContent,'Unavailable');assert.match(run.nodes.get('results-next').textContent,/reliable.*unavailable.*clean hands-off/);assert.match(run.nodes.get('left-observed').textContent,/supported 0–20%/);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('rejected latest evidence keeps earlier accepted values separate and comparison recovery accessible',()=>{
+ const run=setup(),side=measuredSide(8,9),comparison={comparable:true,acceptedRounds:1,left:side,right:side};
+ run.accept({...run.input(),status:'complete',measurements:{comparison,latestComparison:{comparable:false,acceptedRounds:0},rounds:Array.from({length:10},(_,i)=>({number:i+1,complete:true,left:side,right:side}))}});
+ assert.equal(run.nodes.get('results').hidden,false);assert.match(run.nodes.get('results-title').textContent,/Earlier accepted.*latest result unavailable/);assert.match(run.nodes.get('left-observed').textContent,/Earlier accepted.*Latest check excluded/);assert.equal(run.nodes.get('left-deadzone').textContent,'9%');
+ const compare=html.slice(html.indexOf('<details class="comparison-options"'),html.indexOf('<section class="calibration"'));assert.match(compare,/id="reset-rounds"/);assert.equal(run.nodes.get('reset-rounds').disabled,false);run.click('reset-rounds');assert.equal(controlCommands(run)[0].action,'reset_rounds');
+});
+
+test('save confirmation stays outside views and repeated checks are hidden while a trial needs review',()=>{
+ const run=setup(),s={...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState('ready_to_save')};run.accept(s);
+ assert.equal(run.nodes.get('repeat-round').hidden,true);run.click('calibration-save');run.click('nav-controller');assert.equal(run.nodes.get('calibration-confirm').hidden,false);assert.equal(run.nodes.get('studio').dataset.view,'controller');
+ assert.ok(html.indexOf('id="calibration-confirm"')<html.indexOf('class="view-nav"'));assert.deepEqual(controlCommands(run),[]);
 });
