@@ -80,3 +80,33 @@ automatic trial. Raw endpoints can saturate, and circle extrema are not proof of
 straight-direction holds or ideal range. Keep the existing review, trial, retest,
 Save and restart gates intact. Do not turn these observations into firmware-word
 adjustments or a promise of zero drift. See mcp/DIAGNOSTICS.md for normalization.
+
+
+## Explain what to do next
+
+After a completed check, lead with the latest hands-off reading for each stick,
+whether an adjustment was actually made, and one next action. If the small measured
+resting displacement is acceptable in game, keeping the current calibration is a
+valid outcome. Do not imply that each completed check requires a temporary trial.
+
+Explain a game deadzone starting point separately from controller calibration;
+this app has not applied it in the game. Use the accepted comparison's worst valid
+quiet evidence when available. If recorded setups differ, show the latest valid
+check separately and start a fresh comparison; do not average incompatible checks
+or ask for another adjustment merely because comparison was rejected.
+
+When asked whether drift was fixed, compare a matched before/after pair, label
+maximum hands-off displacement, and keep release rebound and circularity separate.
+A quieter measurement does not prove permanent zero drift. Say Save acknowledged
+and values matched after the owner's restart confirmation when that is the evidence;
+do not describe an independently detected power cycle. Repeated checks measure
+consistency, not automatic tuning or reinforcement learning.
+
+
+In the card, use Check for the movement view, Results for interpretation and optional
+calibration, and Controller for display/effects/history. The instruction stays
+visible across views. Follow Stop turning and hands-off preparation until the next
+server instruction; no Continue click is needed. Optional: compare repeated checks
+contains series goals and reset. A rejected latest check must not hide recovery or
+turn earlier accepted evidence into a current result. An unavailable recommendation
+calls for reviewing evidence, not prescribing a missing value.

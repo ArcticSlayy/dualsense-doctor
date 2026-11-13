@@ -14,7 +14,7 @@ A local toolkit for measuring DualSense stick input, reviewing calibration, and 
 - **CLI tools:** sample and monitor sticks with `dsdoctor.py`, or apply temporary trigger effects with `triggers.py`.
 - **MCP coaching:** capture guided, logged measurements; read saved reports; and compare up to ten compatible rounds. The optional card supports 1, 3, or 5-round targets. Game deadzone values are unapplied recommendations.
 - **Directional tuning evidence:** inspect signed resting X/Y means, quiet variation, and four-direction axis reach. Fixed next-check guidance helps separate missing evidence from a repeatable offset, without automatically changing calibration. [How to interpret it](mcp/DIAGNOSTICS.md#directional-stick-assessment).
-- **Optional T3 live card:** view input and coaching progress, compare before/after metrics, export a privacy-filtered PNG, and explicitly apply temporary effects. Browse saved checks with measured range plots and run a separate analog-trigger input check. Frame-gap diagnostics distinguish view cadence from feed rate.
+- **Optional T3 live card:** navigate Check, Results and Controller views, follow prominent stop/hands-off cues and a countdown, read a plain-language result and next step, compare before/after metrics, export a privacy-filtered PNG, and explicitly apply temporary effects. Browse saved checks with measured range plots and run a separate analog-trigger input check. Frame-gap diagnostics distinguish view cadence from feed rate.
 
 Measurement, temporary calibration, and saved controller calibration are separate actions. Read the calibration guide before using calibration controls.
 
@@ -32,7 +32,7 @@ Trial, save, and reboot each require an explicit action. Restarting before savin
 
 The existing gated `recalibrate_center` command is unchanged. When enabled with `DUALSENSE_MCP_ALLOW_CALIBRATION=1`, it performs its own center recalibration and save in one operation. It is not a save-only step for the reviewed candidate. Generic measurement tools do not write calibration.
 
-**Qualification:** independently reviewed implementation with hardware-free checks and live read-only inspection. The new workflow has not yet had a controlled physical trial, save, restart, or persistence readback.
+**Qualification:** independently reviewed implementation with hardware-free checks and live read-only inspection. An owner-operated run has recorded a temporary trial, Save acknowledgement and matching readback after restart confirmation. The app does not detect physical power cycles, and this is not broad hardware qualification.
 
 ## 🖥️ Browser apps
 

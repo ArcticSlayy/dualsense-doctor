@@ -71,3 +71,40 @@ separately from analog trigger travel. D-pad hat directions are not in that mask
 Calibration shows the relevant action and review first; save history and recovery
 controls expand on request. Confirmation, uncertain-write notices and before/after
 review remain visible. Detailed axis observations are also expandable after a check.
+
+
+## Finishing a check
+
+The main result distinguishes the latest completed measurement from a series of
+compatible checks. It shows maximum hands-off displacement and an unapplied game
+radial-deadzone starting point, followed by an explicit next step. A small recorded
+resting displacement can be kept as-is; finishing a measurement does not require
+another calibration. Circularity and release response remain separate observations.
+
+Repeats assess consistency; they do not train firmware. The aggregate keeps the
+worst valid quiet evidence. If a valid incoming round cannot be compared with the
+previous valid rounds under the existing controller, transport and full calibration-
+history checks, the coach starts a fresh comparison. Earlier session files remain
+saved. Invalid incoming evidence cannot discard a valid worst-case result. A card
+connected to an older host can still display its latest individual completed round,
+but never pools a rejected comparison.
+
+During a quiet phase the card says to leave both sticks untouched and labels its
+timer Hands off. The countdown is a visual cue, not proof that the phase passed.
+Afterward the result appears before the live plots; only a real before/after pair
+opens an adjustment comparison. Temporary, saved and restart-confirmed states keep
+their own next steps. Readback follows the owner's restart confirmation; the app
+does not automatically detect a physical power cycle.
+
+
+Check, Results and Controller are direct views; the current movement instruction,
+countdown, command errors and any open Save/restart confirmation stay outside those
+views. Workflow transitions select Check or Results once, without repeatedly
+replacing a manual view choice on input updates. Preparation explicitly asks the
+owner to stop turning and names the upcoming direction; elapsed time never starts
+movement without the server's next instruction. No Continue command is required.
+Comparison targets and reset are under Optional: compare repeated checks. Reset
+stays reachable even if the latest check is rejected or the ten-round limit is met.
+Earlier accepted values remain labeled as earlier evidence. If no reliable deadzone
+candidate exists in the supported range, the next step is evidence review, not an
+instruction to use an unavailable value. Navigation sends no controller commands.
