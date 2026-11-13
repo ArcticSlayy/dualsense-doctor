@@ -52,3 +52,20 @@ Relay meaningful pace, direction, rim-contact and settling corrections without
 asking for readiness at every stage. Countdown completion does not prove movement
 passed. MCP clients may delay progress/log delivery; rendered FPS and input-feed Hz
 are different measurements and neither establishes end-to-end latency.
+
+## Optional read-only diagnostics
+
+In the live card, Load saved checks browses individual historical measurements and
+measured range sectors. Selection never changes the active calibration review. Do
+not pool checks across unknown controller, transport or calibration changes. The
+150% range plots retain missing directions as gaps; they are not live input.
+
+Check trigger travel is a separate explicit input recording with a 3-second countdown
+and 12-second slow pull/release sequence. It sends no effects and does not calibrate
+sticks or trigger endpoints. Respect digital-trigger modifications; endpoints and
+slow-sweep counts are observations, not a hardware-health score. Finish/cancel it
+before other controls or calibration. It is optional and never a baseline substitute.
+
+The view FPS tooltip measures fresh animation callbacks, gaps and synchronous JS
+work. Hidden/stale periods are excluded. These values do not establish paint/GPU
+performance, dropped frames or end-to-end input latency.

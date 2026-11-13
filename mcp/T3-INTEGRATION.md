@@ -14,7 +14,7 @@ Deadzone values are conservative game-setting starting points from observed roun
 
 ## Display, effects, and rates
 
-The relay targets 125 Hz. The card reports actual input-feed and rendered-display rates, which vary by client and machine. Display updates are coalesced; rendered FPS is not an end-to-end latency measurement. Zoom and display preferences do not change measurements.
+The relay targets 125 Hz. The view FPS counter counts fresh animation-frame callbacks; its tooltip reports bounded p95/maximum callback gaps and synchronous JavaScript work, excluding hidden or stale intervals. These are not paint/GPU timings or inferred dropped-frame counts. The card reports actual input-feed and rendered-display rates, which vary by client and machine. Display updates are coalesced; rendered FPS is not an end-to-end latency measurement. Zoom and display preferences do not change measurements.
 
 Light-bar color and brightness are previewed locally. The preview does not predict the physical LED's appearance. Press **Apply color** to send it. Adaptive-trigger settings also require explicit Apply and compatible trigger motors. Sent commands do not confirm physical effect. Games may replace effects; power-off resets them. Effects are separate from stick and trigger-endpoint calibration.
 
@@ -37,3 +37,25 @@ The card owns the HID handle while connected. Disconnect it before using another
 The optional `live_coach_control` actions provide **Check → temporary center trial → full retest → explicit exact-candidate save → owner-confirmed restart and readback**. The trial changes the controller's working calibration state, not a software-only view. It uses a three-second hands-off countdown and does not write range calibration or permanent memory. Save and restart are separate explicit actions and never run automatically.
 
 See [Reviewed calibration workflow](REVIEWED-CALIBRATION.md) for save receipts, acknowledgement limits, legacy `recalibrate_center` behavior, and qualification status. Automated tests do not establish physical accuracy or qualify controller writes. Physical trial and persistence checks remain pending.
+
+## Saved checks and analog trigger diagnostics
+
+The existing Customize panel contains **Load saved checks** and **Check trigger travel**.
+History is loaded only on request, outside the live feed. Each selected check shows
+its own latest calibration epoch and measured 48-direction range. Missing directions
+remain gaps, and the fixed 150% radial scale preserves genuine diagonal reach. No
+history selection replaces the live session, pools separate checks, or authorizes Save.
+Calibration labels describe this app's historical record, not the current controller.
+
+The explicit trigger check waits 3 seconds, then records 12 seconds of slow two-second
+pull/release cues. It uses the existing input owner and sends no effects or calibration
+commands. It reports observed endpoints, complete ordered returns and evidence of
+slow sweeps; it does not diagnose smoothness, motor force or hardware health. Movement
+quality and declared digital-trigger modifications can limit those observations.
+Input loss cancels the capture. Only a complete recording is saved under the private
+session directory's trigger-checks folder. Cancelling while a report is already
+committing can leave that local report on disk; no stale completion is displayed.
+
+Both diagnostic views are separate from stick calibration. Save snapshot continues
+to export the current stick/calibration summary; selected historical plots and trigger
+recordings are not included in that PNG. See [diagnostic limits](DIAGNOSTICS.md).
