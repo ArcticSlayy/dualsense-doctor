@@ -15,6 +15,15 @@ export const PHASES = {
   verify: 'Put the controller down again. Leave BOTH sticks untouched for 5 seconds.',
 };
 export const DEFAULT_SECONDS = { rest:5, range:10, release:10, buttons:8, verify:5 };
+export function calibrationSummary(session) {
+  const record=session.calibrationPersistence;
+  if(record?.epoch===(session.calibrationActions?.length||0)){
+    if(record.status==='verified')return 'Controller calibration matched after an owner-confirmed restart; persistence verified.';
+    if(record.status==='save_acknowledged')return 'Controller save acknowledged; persistence after restart has not been verified.';
+    if(record.status==='pending'||record.status==='ambiguous')return 'Controller save outcome is uncertain; do not automatically retry.';
+  }
+  return session.calibrationActions?.length?'Temporary controller calibration attempted; permanent save not performed for this trial.':'No controller calibration has been written in this session.';
+}
 export function resolveSessionController(saved, available=listControllers()) {
   const matches=available.filter(c=>c.productId===saved.productId && (saved.serialNumber?c.serialNumber===saved.serialNumber:c.path===saved.path));
   const found=matches.find(c=>c.path===saved.path)|| (matches.length===1?matches[0]:null);
@@ -110,7 +119,7 @@ export class SessionStore {
       const same=s.controller.productId===controller.productId && (s.controller.serialNumber ? s.controller.serialNumber===controller.serialNumber : s.controller.path===controller.path);
       if(!same) throw Error('Different controller: start a new session.');
       const metrics=analyzePhase(phase,frames,expectedMs);
-      const capture={number:s.captures.length+1,at:new Date().toISOString(),phase,note,metrics};
+      const capture={number:s.captures.length+1,at:new Date().toISOString(),phase,note,metrics,calibrationEpoch:s.calibrationActions?.length||0};
       writeFileSync(join(this.dir(id),`capture-${capture.number}.json`),JSON.stringify({controller,...capture,frames}));
       s.captures.push(capture);this.save(s);this.log(s);
       const order=Object.keys(PHASES);const nextPhase=metrics.valid?order[order.indexOf(phase)+1]:phase;
@@ -120,14 +129,16 @@ export class SessionStore {
   report(id) {
     const s=this.get(id);const rests=s.captures.filter(c=>(c.phase==='rest'||c.phase==='verify')&&c.metrics.valid);
     const first=rests[0],last=rests.at(-1);const sameMode=first?.metrics.mode===last?.metrics.mode;
-    const latest=Object.fromEntries(Object.keys(PHASES).map(p=>[p,s.captures.filter(c=>c.phase===p).at(-1)]));
+    const epoch=s.calibrationActions?.length||0;
+    const latest=Object.fromEntries(Object.keys(PHASES).map(p=>[p,s.captures.filter(c=>c.phase===p&&(c.calibrationEpoch||0)===epoch).at(-1)]));
     const complete=Object.values(latest).every(c=>c?.metrics.valid) && Object.entries(latest).every(([p,c])=>p==='verify'||c.number<latest.verify.number) && new Set(Object.values(latest).map(c=>c?.metrics.mode)).size===1;
     const finalRest=s.captures.filter(c=>c.phase==='rest'||c.phase==='verify').at(-1);
-    const deadzones=finalRest?.metrics.valid?{left:finalRest.metrics.left.deadzonePercent,right:finalRest.metrics.right.deadzonePercent}:null;
-    return {...s,complete,logPath:join(this.dir(id),'summary.md'),recommendation:{radialDeadzonePercent:deadzones,applied:false,note:`Measured p99 rest radius + 1 percentage point. Candidate for game settings; verify in play. No controller calibration has been written.`,nextAction:!complete?'Repeat missing/invalid phases before deciding.':'Review measured center and circularity; game deadzones are separate settings. On-controller changes need verified before/after measurements.'},comparison:rests.length>1&&sameMode?{leftOffsetDeltaRaw:round(last.metrics.left.offsetRaw-first.metrics.left.offsetRaw),rightOffsetDeltaRaw:round(last.metrics.right.offsetRaw-first.metrics.right.offsetRaw),leftJitterDeltaRaw:round(last.metrics.left.jitterRaw-first.metrics.left.jitterRaw),rightJitterDeltaRaw:round(last.metrics.right.jitterRaw-first.metrics.right.jitterRaw),note:'Last valid rest minus first valid rest; negative is less measured offset/noise. No causal improvement claim.'}:null};
+    const deadzones=finalRest?.metrics.valid&&(finalRest.calibrationEpoch||0)===epoch?{left:finalRest.metrics.left.deadzonePercent,right:finalRest.metrics.right.deadzonePercent}:null;
+    return {...s,complete,logPath:join(this.dir(id),'summary.md'),recommendation:{radialDeadzonePercent:deadzones,applied:false,note:`Measured p99 rest radius + 1 percentage point. Candidate for game settings; verify in play. ${calibrationSummary(s)}`,nextAction:!complete?'Repeat missing/invalid phases before deciding.':'Review measured center and circularity; game deadzones are separate settings. On-controller changes need verified before/after measurements.'},comparison:rests.length>1&&sameMode?{leftOffsetDeltaRaw:round(last.metrics.left.offsetRaw-first.metrics.left.offsetRaw),rightOffsetDeltaRaw:round(last.metrics.right.offsetRaw-first.metrics.right.offsetRaw),leftJitterDeltaRaw:round(last.metrics.left.jitterRaw-first.metrics.left.jitterRaw),rightJitterDeltaRaw:round(last.metrics.right.jitterRaw-first.metrics.right.jitterRaw),note:'Last valid rest minus first valid rest; negative is less measured offset/noise. No causal improvement claim.'}:null};
   }
   log(s) {
-    const lines=[`# Stick session ${s.id}`,s.goal,`Started ${s.created}`,'Controller writes: none. Settings applied: none.',''];
+    const lines=[`# Stick session ${s.id}`,s.goal,`Started ${s.created}`,calibrationSummary(s),''];
+    for(const a of s.calibrationActions||[]) lines.push(`Calibration ${a.at}: ${a.kind}, ${a.status}; checkpoint ${a.checkpointPath}`);
     for(const c of s.captures){const m=c.metrics;lines.push(`${c.number}. ${c.phase}: ${m.valid?'valid':'REPEAT'}; ${m.samples} samples, ${(m.durationMs/1000).toFixed(1)}s${c.note?`; ${c.note.replace(/[\r\n]/g,' ')}`:''}`);if(m.left)lines.push(`   Left ${JSON.stringify(m.left)}; right ${JSON.stringify(m.right)}`);for(const w of m.warnings)lines.push(`   ${w}`);}
     writeFileSync(join(this.dir(s.id),'summary.md'),lines.join('\n')+'\n');
   }
