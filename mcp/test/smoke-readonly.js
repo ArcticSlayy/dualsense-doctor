@@ -12,7 +12,7 @@ const client=new Client({name:'readonly-handshake',version:'1.0.0'});
 try {
   await client.connect(transport);
   const tools=await client.listTools();
-  for(const name of ["start_session", "capture_phase", "session_report", "run_guided_session", "show_live_coach", "live_coach_state", "live_coach_control"])assert.ok(tools.tools.some(t=>t.name===name),name);
+  for(const name of ["start_session", "capture_phase", "session_report", "compare_sessions", "run_guided_session", "show_live_coach", "live_coach_state", "live_coach_control"])assert.ok(tools.tools.some(t=>t.name===name),name);
   assert.ok(!tools.tools.some(t=>t.name==='recalibrate_center'));
   assert.ok(!tools.tools.some(t=>t.name==='temporary_center'));
   const resources=await client.listResources();assert.ok(resources.resources.some(r=>r.uri==='dualsense://status'));
