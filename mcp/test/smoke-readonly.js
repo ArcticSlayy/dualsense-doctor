@@ -19,5 +19,5 @@ try {
   const prompt=await client.getPrompt({name:'calibrate_sticks_best'});assert.ok(prompt.messages.length);
   const sessions=await client.callTool({name:'list_sessions',arguments:{}});assert.ok(!sessions.isError);
   assert.deepEqual(JSON.parse(sessions.content[0].text).sessions,[]);
-  console.log(JSON.stringify({passed:true,toolCount:tools.tools.length,hardwareAccess:'none',permanentCalibrationEnabled:false}));
+  console.log(JSON.stringify({passed:true,toolCount:tools.tools.length,hardwareAccess:'none',legacyRecalibrationEnabled:false}));
 } finally {await client.close();rmSync(sessionRoot,{recursive:true});}

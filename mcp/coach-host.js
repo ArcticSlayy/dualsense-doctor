@@ -4,6 +4,9 @@ import { Controller, parseSticks, listControllers, TRIGGER_PRESETS, effFeedback 
 import { SessionStore } from './guided.js';
 import { runGuided, RUN_STEPS } from './coach-runner.js';
 import { compareSessionReports } from './session-comparison.js';
+import { join } from 'node:path';
+import { CalibrationWorkflow } from './calibration-workflow.js';
+import { runCalibrationWorker } from './calibration-worker.js';
 
 // Sony's battery nibble reports 10% intervals; use midpoint estimates except full.
 export function batteryFromReport(buf,mode) {
@@ -16,10 +19,123 @@ export function batteryFromReport(buf,mode) {
 }
 
 export class CoachHost {
-  constructor(store=new SessionStore()) {
+  constructor(store=new SessionStore(),{workflow,worker=runCalibrationWorker,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),enableCalibration=true}={}) {
     this.store=store;this.c=null;this.queue=[];this.latest=null;this.lastAt=0;this.events=[];this.run=null;this.status='idle';this.instruction='Connect your controller, then start the guided check.';this.warning=null;this.progress=0;this.currentIndex=0;this.resumeIndex=0;this.completedSteps=new Set();this.sequence=0;this.inputCount=0;this.rateAt=performance.now();this.inputHz=0;
     this.effects={lightbar:null,triggers:null};this.battery=null;this.firmware=null;
     this.roundReports=[];this.roundTarget=1;this.roundGeneration=0;this.refreshMeasurements();
+    this.calibrationWorkflow=workflow??(store.root?new CalibrationWorkflow(join(store.root,'calibration-history')):null);
+    this.calibrationWorker=worker;this.wait=wait;this.enableCalibration=enableCalibration;
+    this.calibrationOperation=null;this.calibrationCountdownUntil=0;this.calibrationRequiresRestart=this.calibrationWorkflow?.needsRestart?.()||false;
+    this.calibrationInspectionPending=true;this.calibrationControllerPath=null;
+  }
+  calibrationState() {
+    let state=this.calibrationWorkflow?.snapshot()??{stage:'unknown',message:'Calibration workflow is unavailable.',lastSavedAt:null,verifiedAt:null,firmwareSaveTimestamp:null,historySource:'this_app'};
+    if(this.calibrationInspectionPending&&!this.calibrationRequiresRestart)state={...state,stage:'unknown',message:'Inspect calibration history for this connection before using saved status.',lastSavedAt:null,verifiedAt:null,reviewId:null,comparison:null};
+    const busy=!!this.calibrationOperation,idle=!busy&&!this.run&&!['running','paused'].includes(this.status);
+    const fresh=!!this.c&&!!this.latest&&performance.now()-this.lastAt<300;
+    const standard=fresh&&this.latest.mode==='usb'&&this.c.info.productId===0x0ce6;
+    const ready=idle&&this.enableCalibration&&!!this.calibrationWorkflow;
+    const trial=!!this.calibrationWorkflow?.getTrialSessionId();
+    let canVerify=false;try{canVerify=!!this.calibrationWorkflow?.verificationCandidate();}catch{}
+    return {...state,inspectionNeeded:this.calibrationInspectionPending,busy,operation:this.calibrationOperation,countdownSeconds:Math.max(0,(this.calibrationCountdownUntil-performance.now())/1000),
+      blockedReason:busy?'Controller operation in progress.':!this.enableCalibration?'Calibration actions are disabled.':!idle?'Finish or stop the current check first.':this.calibrationRequiresRestart?'Restart the controller, then confirm the restart before continuing.':!standard?'Connect a standard DualSense with a USB data cable.':null,
+      actions:{inspect:ready,trial:ready&&standard&&!this.calibrationRequiresRestart&&!trial&&this.result?.complete===true&&state.stage==='measured',retest:ready&&fresh&&trial&&!this.calibrationRequiresRestart&&!this.calibrationInspectionPending,
+        save:ready&&standard&&!this.calibrationRequiresRestart&&state.stage==='ready_to_save'&&!!state.reviewId,reboot:ready&&standard,
+        verify:ready&&((canVerify&&!this.calibrationInspectionPending)||this.calibrationRequiresRestart)}};
+  }
+  noteCalibrationInspection(snapshot){this.calibrationInspectionPending=false;this.calibrationControllerPath=snapshot.controller?.path??null;}
+  async inspectForCalibration(){this.calibrationInspectionPending=true;const snapshot=await this.calibrationWorker({operation:'inspect'});this.noteCalibrationInspection(snapshot);return snapshot;}
+  releaseLiveHandle() {
+    const c=this.c;this.c=null;c?.close();this.latest=null;this.queue=[];this.battery=null;this.firmware=null;this.effects={lightbar:null,triggers:null};
+  }
+  recordPersistence(status) {
+    const context=this.calibrationWorkflow?.saveSessionContext?.();
+    if(!context)return;
+    try{
+      const session=this.store.get(context.sessionId);
+      if((session.calibrationActions?.length||0)!==context.epoch)throw Error('Session calibration changed after this save attempt.');
+      const view=this.calibrationWorkflow.snapshot();
+      session.calibrationPersistence={epoch:context.epoch,status,lastSavedAt:view.lastSavedAt,verifiedAt:view.verifiedAt};
+      this.store.save(session);this.store.log(session);
+    }catch(error){this.warning=`Save history is in the calibration journal, but the session log could not be updated: ${error.message}`;}
+  }
+  async calibrationAction(action,input={}) {
+    const key=action.replace('calibration_',''),caps=this.calibrationState();
+    if(!caps.actions[key])throw Error(caps.blockedReason||'This calibration action is not available yet.');
+    if(key==='retest'){await this.launch(false,this.roundTarget,true);return this.snapshot();}
+    if(key==='trial'&&input.confirm!=='TRY_TEMPORARY_CENTER')throw Error('Confirm the temporary center adjustment with hands off both sticks.');
+    if(key==='save'&&input.confirm!=='SAVE_REVIEWED_CALIBRATION')throw Error('Review the measured result and confirm saving this calibration.');
+    if(key==='reboot'&&input.confirm!=='REBOOT_CONTROLLER')throw Error('Confirm restarting the controller.');
+    const rawStage=this.calibrationWorkflow?.snapshot().stage;
+    if(key==='reboot'&&['trial_applied','ready_to_save'].includes(rawStage)&&input.discardUnsaved!==true)throw Error('Restarting will discard the unsaved adjustment. Confirm discarding it.');
+    if(key==='verify'&&input.restartConfirmed!==true)throw Error('Confirm that you actually restarted or power-cycled the controller.');
+    const workflow=this.calibrationWorkflow,hadConnection=!!this.c;
+    this.calibrationOperation=key;this.warning=null;
+    let saveStarted=false,trialStarted=false;
+    try {
+      if(key==='trial'){
+        const baselineReport=this.store.report(this.sessionId);
+        this.calibrationCountdownUntil=performance.now()+3000;this.instruction='Hands off both sticks. Temporary center adjustment starts in three seconds.';
+        await this.wait(3000);this.calibrationCountdownUntil=0;
+        if(!this.c||!this.latest||performance.now()-this.lastAt>300)throw Error('Controller input was lost before the adjustment.');
+        this.releaseLiveHandle();this.instruction='Keep both sticks untouched while the center is sampled.';
+        const snapshot=await this.inspectForCalibration();
+        const candidate=workflow.beginTrial({sessionId:this.sessionId,baselineReport,snapshot});trialStarted=true;
+        const result=await this.calibrationWorker({operation:'trial',sessionId:this.sessionId,confirm:input.confirm,countdownConfirmed:true,...candidate});
+        workflow.recordTrial({sessionId:this.sessionId,before:result.before,after:result.after,baselineReport});
+        this.noteCalibrationInspection(result.after);
+        this.clearRounds();this.result=null;this.status='idle';this.instruction='Temporary center adjustment applied. Retest it before deciding whether to save.';
+      } else {
+        this.releaseLiveHandle();
+        if(key==='inspect'){
+          const snapshot=await this.inspectForCalibration();workflow.inspect(snapshot);
+          if(this.result?.complete&&!workflow.getTrialSessionId()&&!this.calibrationRequiresRestart&&!['ambiguous','save_acknowledged','verified'].includes(workflow.snapshot().stage))workflow.measured(this.store.report(this.sessionId),snapshot);
+          this.instruction='Calibration inspected. Save history shown here records actions made by this app.';
+        } else if(key==='save'){
+          const snapshot=await this.inspectForCalibration();
+          const candidate=workflow.beginSave({reviewId:input.reviewId,report:this.store.report(this.sessionId),snapshot});saveStarted=true;
+          this.recordPersistence('pending');
+          this.instruction='Saving the reviewed calibration. Keep USB connected.';
+          const result=await this.calibrationWorker({operation:'save',confirm:input.confirm,...candidate});
+          workflow.finishSave(result);this.recordPersistence(result.saveAcknowledged?'save_acknowledged':'ambiguous');this.instruction=result.saveAcknowledged?'Save acknowledged. Restart and verify before claiming persistence.':'Save outcome is uncertain. Do not repeat it automatically; restart and verify the recorded values.';
+        } else if(key==='verify'){
+          if(this.calibrationRequiresRestart){
+            const snapshot=await this.inspectForCalibration();workflow.resolveInterruptedTrial(snapshot,true);this.calibrationRequiresRestart=false;this.result=null;this.status='idle';
+          }else{
+            const candidate=workflow.verificationCandidate();
+            const result=await this.calibrationWorker({operation:'verify',...candidate,restartConfirmed:true});
+            workflow.finishVerification(result,result.snapshot);
+            this.noteCalibrationInspection(result.snapshot);
+            this.recordPersistence('verified');
+          }
+          this.instruction=workflow.snapshot().message;
+        } else if(key==='reboot'){
+          const result=await this.calibrationWorker({operation:'reboot',confirm:input.confirm});
+          if(['trial_applied','ready_to_save'].includes(rawStage)){workflow.abandonTrial();this.result=null;this.status='idle';}
+          this.calibrationInspectionPending=true;
+          this.clearRounds();this.instruction=result.status==='ambiguous'?'Restart request outcome is uncertain. Reconnect, then confirm an actual restart before verification.':'Restart requested. Reconnect, then confirm the restart to verify saved calibration.';
+        }
+      }
+    }catch(error){
+      if(key==='trial'&&trialStarted){this.calibrationRequiresRestart=true;try{workflow.markTrialUncertain();}catch{}this.result=null;this.status='idle';}
+      if(key==='save'&&saveStarted){try{workflow.finishSave({saveAcknowledged:false,persistenceVerified:false,status:'ambiguous',issues:[{stage:'worker',message:error.message}]});this.recordPersistence('ambiguous');}catch{}}
+      this.warning=error.message;throw error;
+    }finally{
+      this.calibrationCountdownUntil=0;
+      if(hadConnection&&key!=='reboot'){const instruction=this.instruction;try{this.connect({resumeInspection:true});this.instruction=instruction;}catch(error){this.calibrationInspectionPending=true;this.warning=this.warning||`Reconnect the controller: ${error.message}`;}}
+      this.calibrationOperation=null;
+    }
+    return this.snapshot();
+  }
+  async prepareCalibrationResult(report) {
+    if(!this.calibrationWorkflow||!this.enableCalibration||this.calibrationOperation)return;
+    this.calibrationOperation='prepare';const hadConnection=!!this.c;
+    try{
+      this.releaseLiveHandle();const snapshot=await this.inspectForCalibration();
+      if(this.calibrationWorkflow.getTrialSessionId())this.calibrationWorkflow.prepare(report,snapshot);
+      else this.calibrationWorkflow.measured(report,snapshot);
+    }catch(error){this.warning=`Calibration review is unavailable: ${error.message}`;}
+    finally{if(hadConnection){try{this.connect({resumeInspection:true});}catch(error){this.calibrationInspectionPending=true;this.warning=this.warning||error.message;}}this.instruction=this.calibrationWorkflow.snapshot().message;this.calibrationOperation=null;}
   }
   refreshMeasurements() {
     this.measurements={targetRounds:this.roundTarget,comparison:compareSessionReports(this.roundReports),rounds:this.roundReports.map((report,i)=>{
@@ -27,7 +143,8 @@ export class CoachHost {
       return {number:i+1,complete:summary.acceptedRounds===1,...Object.fromEntries(['left','right'].map(side=>[side,{observedPeakPercent:summary[side]?.observedPeakPercent??null,suggestedDeadzonePercent:summary[side]?.suggestedDeadzonePercent??null,circularityPercent:summary[side]?.circularity?.latest??null}]))};
     })};
   }
-  rememberRound(report) {
+  rememberRound(report,afterCaptureNumber) {
+    if(report&&Number.isInteger(afterCaptureNumber))report={...report,id:`${report.id}@${afterCaptureNumber}`,captures:report.captures.filter(c=>c.number>afterCaptureNumber)};
     if(!report?.complete||!report.id||this.roundReports.some(r=>r.id===report.id))return;
     if(this.roundReports.length>=10)return;
     this.roundReports.push(report);this.refreshMeasurements();
@@ -43,10 +160,12 @@ export class CoachHost {
     if(e.type==='progress'){this.warning=e.warning||null;this.phaseProgress=e.phaseProgress||0;this.progress=(this.currentIndex+this.phaseProgress)/RUN_STEPS.length;this.secondsRemaining=e.secondsRemaining;this.details=e.details;}
     if(e.type!=='progress'){this.events.push({at:e.at||new Date().toISOString(),message:e.message});this.events=this.events.slice(-30);}
   }
-  connect() {
+  connect({resumeInspection=false}={}) {
     if(this.c)return;
+    if(!resumeInspection)this.calibrationInspectionPending=true;
     const devices=listControllers();
     if(devices.length!==1)throw Error('Connect exactly one DualSense for this live card.');
+    if(this.calibrationControllerPath&&devices[0].path!==this.calibrationControllerPath)this.calibrationInspectionPending=true;
     const c=new Controller(devices[0]);c.open();this.c=c;this.effects={lightbar:null,triggers:null};this.firmware=c.readFirmware();
     c.dev.on('data',buf=>{
       if(this.c!==c)return;
@@ -59,25 +178,31 @@ export class CoachHost {
     c.dev.on('error',e=>{if(this.c!==c)return;this.warning=`Controller input lost: ${e.message}`;this.disconnect();this.status='error';});
     this.instruction='Live view connected. Start once; follow the changing instructions.';
   }
-  disconnect(){this.abort?.abort();const c=this.c;this.c=null;c?.close();this.latest=null;this.queue=[];this.battery=null;this.firmware=null;this.effects={lightbar:null,triggers:null};this.clearRounds();if(this.status==='running')this.status='paused';}
-  async launch(resume=false,roundTarget=this.roundTarget) {
+  disconnect(){this.calibrationInspectionPending=true;this.result=null;this.abort?.abort();const c=this.c;this.c=null;c?.close();this.latest=null;this.queue=[];this.battery=null;this.firmware=null;this.effects={lightbar:null,triggers:null};this.clearRounds();if(this.status==='running')this.status='paused';}
+  async launch(resume=false,roundTarget=this.roundTarget,retest=false) {
     if(this.run)throw Error('A guided check is already running.');
     if(![1,3,5].includes(roundTarget))throw Error('Choose 1, 3, or 5 comparison rounds.');
     if(!resume&&this.roundReports.length>=10)throw Error('Ten rounds are saved. Start a new comparison to continue.');
     if(!this.c||performance.now()-this.lastAt>300)throw Error('Waiting for fresh controller input.');
+    if(this.calibrationRequiresRestart)throw Error('Restart the controller and confirm it before starting another check.');
+    const trialSession=this.calibrationWorkflow?.getTrialSessionId();
+    if(trialSession&&!resume&&!retest)throw Error('Use Retest adjustment to measure the temporary calibration in its original session.');
     this.roundTarget=roundTarget;this.refreshMeasurements();const generation=this.roundGeneration;
     this.queue=[];this.abort=new AbortController();this.status='running';this.warning=null;this.result=null;
     const startIndex=resume?this.resumeIndex:0;
-    if(!resume){this.progress=0;this.sessionId=null;this.events=[];this.completedSteps.clear();}
+    if(!resume){this.progress=0;this.sessionId=retest?trialSession:null;this.events=[];this.completedSteps.clear();}
     else for(const i of this.completedSteps)if(i>=startIndex)this.completedSteps.delete(i);
+    if(!resume)this.roundStartCaptureNumber=retest?Math.max(0,...this.store.get(trialSession).captures.map(c=>c.number)):0;
     const proxy={info:this.c.info,_readOnce:()=>this.queue.shift()||null};
-    const task=runGuided(proxy,this.store,{signal:this.abort.signal,steps:RUN_STEPS.slice(startIndex),existingSession:resume?this.sessionId:undefined,onEvent:e=>this.event(e)});
+    const task=runGuided(proxy,this.store,{signal:this.abort.signal,steps:RUN_STEPS.slice(startIndex),existingSession:resume||retest?this.sessionId:undefined,onEvent:e=>this.event(e)});
     this.run=task;
-    task.then(result=>{this.result=result;this.status=result.complete?'complete':'paused';if(!result.complete){this.warning=result.reason;this.resumeIndex=this.currentIndex===2?1:this.currentIndex;}else{this.progress=1;this.warning=null;if(generation===this.roundGeneration)this.rememberRound(result.report);}}).catch(e=>{
+    task.then(async result=>{if(generation!==this.roundGeneration)return;this.result=result;this.status=result.complete?'complete':'paused';if(!result.complete){this.warning=result.reason;this.resumeIndex=this.currentIndex===2?1:this.currentIndex;}else{this.progress=1;this.warning=null;this.rememberRound(result.report,this.roundStartCaptureNumber??0);await this.prepareCalibrationResult(result.report);}}).catch(e=>{
       if(this.status!=='paused'&&this.status!=='idle'){this.status='error';this.warning=e.message;}
     }).finally(()=>{if(this.run===task)this.run=null;});
   }
   async control(action,input={}) {
+    if(this.calibrationOperation)throw Error('A controller operation is in progress. Wait for its result.');
+    if(action.startsWith('calibration_'))return this.calibrationAction(action,input);
     if(action==='connect')this.connect();
     else if(action==='disconnect'){this.disconnect();this.status='idle';}
     else if(action==='lightbar') {
@@ -118,6 +243,7 @@ export class CoachHost {
     return {connected:!!this.c,status:this.status,latest:ageMs!==null&&ageMs<300?this.latest:null,ageMs,sequence:this.sequence,inputHz:this.inputHz,publishHz:125,clientMetrics:this.clientMetrics||null,battery:this.battery,firmware:this.firmware,effects:this.effects,controller:this.c?{product:this.c.info.product,productId:this.c.info.productId}:null,
       phase:step?.phase||null,direction:step?.direction||null,phaseProgress:this.phaseProgress||0,preparing,prepareSecondsRemaining,prepareDurationSeconds:this.prepareDurationSeconds||0,
       measurements:this.measurements,
+      calibration:this.calibrationState(),
       instruction:this.instruction,warning:this.warning,progress:this.progress,secondsRemaining:active?(preparing?Math.ceil(prepareSecondsRemaining):this.secondsRemaining??null):null,details:active?(this.details||{}):{},sessionId:this.sessionId||null,result:this.result?{complete:this.result.complete,logPath:this.result.report?.logPath,reason:this.result.reason}:null,events:this.events,
       stepIndex:this.currentIndex,steps:RUN_STEPS.map((s,i)=>({id:s.direction?`range-${s.direction}`:s.phase,label:labels[i],status:this.completedSteps.has(i)?'complete':i===this.currentIndex&&['running','paused'].includes(this.status)?'current':'pending'}))};
   }

@@ -4,8 +4,9 @@
 //
 // SAFETY: the brick-risk NVS recalibration tool is NOT registered unless the human sets
 // DUALSENSE_MCP_ALLOW_CALIBRATION=1, and even then it requires an explicit confirm token,
-// is USB-only, and waits for the sticks to be at rest. Every other tool is read-only or
-// reversible (trigger/lightbar effects reset on power-cycle). All inputs are validated/clamped.
+// is USB-only, and waits for the sticks to be at rest. Other base tools are read-only or
+// reversible, except the optional live-card reviewed calibration actions. Those require
+// explicit decisions, bound session evidence and a separate restart verification.
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -22,7 +23,7 @@ import {
 
 const ALLOW_CALIB = process.env.DUALSENSE_MCP_ALLOW_CALIBRATION === '1';
 
-const GUIDE = "Use responsive, read-only DualSense coaching after the user begins one session. run_guided_session monitors speed, direction, rim contact, settling and button contamination, then advances only when movement criteria pass. Relay MCP progress and logging notifications; their delivery latency depends on the client, so do not promise an instant live display. Targeted capture_phase remains available for repeat measurements. Circularity, resting drift and game deadzones are different metrics. Preserve balanced range rather than chasing a zero circularity score; the referenced DualShock Tools guidance is 7–9%, with symmetry taking priority. These are measurements and unapplied setting candidates, not controller calibration. Existing opt-in firmware calibration is separate and is not qualified by the coaching tests. Return concise logs and distinguish observations from actual changes.";
+const GUIDE = "Use responsive, read-only DualSense coaching after the user begins one session. run_guided_session monitors speed, direction, rim contact, settling and button contamination, then advances only when movement criteria pass. Relay MCP progress and logging notifications; their delivery latency depends on the client, so do not promise an instant live display. Targeted capture_phase remains available for repeat measurements. Circularity, resting drift and game deadzones are different metrics. Preserve balanced range rather than chasing a zero circularity score; the referenced DualShock Tools guidance is 7–9%, with symmetry taking priority. These are measurements and unapplied setting candidates, not controller calibration. Existing opt-in firmware calibration is separate and is not qualified by the coaching tests. The optional live card separately supports a temporary center trial, complete retest, explicit exact-candidate save and owner-confirmed restart verification. Never infer save approval from a completed check; local receipts are not firmware timestamps. Return concise logs and distinguish observations from actual changes.";
 const server = new McpServer({ name: 'dualsense-doctor', version: '1.1.0' }, { instructions: GUIDE, capabilities: { logging: {} } });
 const sessions = new SessionStore();
 
@@ -31,14 +32,14 @@ const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj, null,
 const PATH = { path: z.string().optional().describe('Specific controller path from list_controllers; omit to use the first found') };
 
 server.registerTool('show_live_coach',{
-  description:'Prepare the interactive live stick card for T3 chat. Returns an absolute HTML path; render with html_preview then html_render. Preview and desktop network policies may differ; verify on the target client. Card offers live axes, adaptive text-only prompts and Start/Pause. No separate browser dashboard, voice, or calibration writes.',inputSchema:{},
+  description:'Prepare the interactive live stick card for T3 chat. Returns an absolute HTML path; render with html_preview then html_render. Preview and desktop network policies may differ; verify on the target client. Card offers live axes, adaptive text-only prompts and Start/Pause. Shows measurement and calibration actions separately; opening the card sends no calibration commands.',inputSchema:{},
 },async()=>ok(await coachCardPath()));
 server.registerTool('live_coach_state',{description:'Current live axes, coaching stage, corrections, and session status from the embedded card.',inputSchema:{}},async()=>{
   const info=await ensureCoach();const r=await fetch(`${info.apiBase}/state?token=${info.token}`);return ok(await r.json());
 });
 server.registerTool('live_coach_control',{
-  description:'Control adaptive guided checks, connect/disconnect the live view, and explicitly send temporary lightbar or adaptive-trigger effects. Start measurement once; later phases advance from evidence. Trigger effects require a paused/idle check and compatible motors. No calibration or flash command.',
-  inputSchema:{action:z.enum(['connect','disconnect','start','pause','resume','stop','lightbar','triggers','reset_rounds']),roundTarget:z.union([z.literal(1),z.literal(3),z.literal(5)]).optional(),r:z.number().int().min(0).max(255).optional(),g:z.number().int().min(0).max(255).optional(),b:z.number().int().min(0).max(255).optional(),preset:z.enum(['off','light','firm','max','weapon','custom']).optional(),target:z.enum(['both','left','right']).optional(),position:z.number().int().min(0).max(9).optional(),strength:z.number().int().min(1).max(8).optional()},
+  description:'Control adaptive guided checks, connect/disconnect the live view, and explicitly send temporary lightbar or adaptive-trigger effects. Start measurement once; later phases advance from evidence. Trigger effects require a paused/idle check and compatible motors. Calibration trial/save/reboot actions require an explicit corresponding user decision. Save needs the current reviewId after a valid retest; completing a check is not save approval. Verify requires confirmation of an actual controller restart. Never retry an uncertain write automatically.',
+  inputSchema:{action:z.enum(['connect','disconnect','start','pause','resume','stop','lightbar','triggers','reset_rounds','calibration_inspect','calibration_trial','calibration_retest','calibration_save','calibration_reboot','calibration_verify']),confirm:z.enum(['TRY_TEMPORARY_CENTER','SAVE_REVIEWED_CALIBRATION','REBOOT_CONTROLLER']).optional(),reviewId:z.string().uuid().optional(),restartConfirmed:z.literal(true).optional(),discardUnsaved:z.literal(true).optional(),roundTarget:z.union([z.literal(1),z.literal(3),z.literal(5)]).optional(),r:z.number().int().min(0).max(255).optional(),g:z.number().int().min(0).max(255).optional(),b:z.number().int().min(0).max(255).optional(),preset:z.enum(['off','light','firm','max','weapon','custom']).optional(),target:z.enum(['both','left','right']).optional(),position:z.number().int().min(0).max(9).optional(),strength:z.number().int().min(1).max(8).optional()},
 },async(input)=>{
   const info=await ensureCoach();const r=await fetch(`${info.apiBase}/control?token=${info.token}`,{method:'POST',body:JSON.stringify(input)});const result=await r.json();if(!r.ok)throw Error(result.error);return ok(result);
 });
@@ -164,4 +165,4 @@ server.registerResource('status', 'dualsense://status',
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error(`dualsense-doctor MCP ready. Calibration tool ${ALLOW_CALIB ? 'ENABLED' : 'disabled (set DUALSENSE_MCP_ALLOW_CALIBRATION=1 to enable)'}.`);
+console.error(`dualsense-doctor MCP ready. Legacy recalibrate_center ${ALLOW_CALIB ? 'ENABLED' : 'disabled (set DUALSENSE_MCP_ALLOW_CALIBRATION=1 to enable)'}.`);

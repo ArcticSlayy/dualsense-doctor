@@ -23,6 +23,19 @@ test('round targets validate before measurement and disconnect clears cross-devi
   assert.equal(host.snapshot().measurements.comparison.acceptedRounds,0);assert.equal(host.run,null);
 });
 
+test('separate retest runs in one session count as distinct rounds without reusing earlier captures',()=>{
+  const host=new CoachHost({});
+  const first=savedRound('same-session',4),second=savedRound('same-session',2);
+  second.captures=second.captures.map(c=>({...c,number:c.number+5}));
+  host.rememberRound(first,0);
+  host.rememberRound({...second,captures:[...first.captures,...second.captures]},5);
+  const view=host.snapshot().measurements;
+  assert.equal(view.comparison.acceptedRounds,2);
+  assert.equal(view.rounds[0].left.observedPeakPercent,4);
+  assert.equal(view.rounds[1].left.observedPeakPercent,2);
+  assert.equal(view.comparison.left.suggestedDeadzonePercent,5);
+});
+
 test('preparation, phase progress and current corrections remain distinct in snapshots',()=>{
   const host=new CoachHost({});host.status='running';
   host.event({type:'instruction',phase:'range',direction:'clockwise',countdownSeconds:3,message:'Clockwise'});
