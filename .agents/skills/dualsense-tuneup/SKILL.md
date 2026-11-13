@@ -122,3 +122,8 @@ includes a margin; it is not a minimum. Keep a lower stable setting. Zero should
 validated in play, never treated as proof of better hardware calibration. The choice
 of game affects settings interpretation, not the identity or validity of controller
 calibration. Optional controls must not obscure an active trial or uncertain save.
+
+Results lead with the next decision, then movement measured at rest and a separate
+optional game-deadzone suggestion. Explain whether the current workflow is only a
+check, an unsaved trial or a save awaiting verification. Busy/uncertain operations
+take precedence over ordinary advice. Multi-check history is under optional repeats.

@@ -6,16 +6,17 @@ effects and screenshots are optional tasks, not steps required after every check
 
 ## Visual system
 
-- Keep the outer page transparent for embedding. Neutral, opaque functional
+- Keep the outer page transparent for embedding. Opaque functional
   panels distinguish the tool from the surrounding conversation.
-- Derive surfaces, text and control colors from the host theme. Use one restrained
-  accent for selected navigation, progress and focus. Avoid full-panel warning
-  colors for normal hands-off measurement, colored brand stripes and filled tabs.
+- Derive surfaces, text and control colors from the host theme. Use the primary accent for
+  actions, selected navigation, progress and a tinted result takeaway. Use the
+  two chart colors for labeled left/right measurement surfaces. Do not dilute
+  every accent into gray. Avoid warning colors for ordinary hands-off measurement.
 - Use 15px body text, 14px explanatory text, 19px section headings and 24px active
   instructions (22px on narrow screens). The timer remains prominent at 34px.
   Smaller telemetry is supplementary, never the only instruction.
 - Use ordinary sentence case and clear headings. No decorative uppercase kicker.
-- Selected navigation uses text weight and an underline, not color alone. Actions
+- Selected navigation uses a tint, text weight and an underline, not color alone. Actions
   retain visible borders, focus rings and at least 44px targets. Motion stays low;
   reduced-motion users get no button transitions.
 - Check light and dark themes, narrow layouts, real copy, text contrast of at least
@@ -28,6 +29,11 @@ checks, including accepted checks already completed; the user starts every repea
 Choosing a target never sends a command. A met goal must not read as "3 of 1".
 Keep repeat and reset actions with their optional comparison explanation.
 
+The result heading states the next step in plain language, specific to the
+current evidence and calibration stage. Busy or uncertain operations take priority.
+The measured resting peak is separate from the game-setting suggestion, and an
+explicit sentence explains whether this is a measurement, a temporary trial or a
+save awaiting verification. Put multi-check history with optional repeat controls.
 The result leads with what to do next. Game-deadzone values are conservative
 suggestions rather than scores, required minimums, or values applied to the
 controller. Explain the quiet-peak margin and zero-deadzone tradeoff on request.
