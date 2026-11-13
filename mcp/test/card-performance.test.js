@@ -9,7 +9,7 @@ function setup({storedPreferences,blockedStorage=false,controlResponse,controlEr
   let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],timeouts=[],nodes=new Map(),storage=new Map(),downloads=[],canvasWrites=[];
   const drawing={measureText:value=>({width:String(value).length*11}),fillText:(...args)=>canvasWrites.push(args)};for(const method of ['fillRect','beginPath','arc','stroke','moveTo','lineTo','setLineDash','fill'])drawing[method]=()=>{};
   if(storedPreferences)storage.set('dualsense-coach-display',JSON.stringify(storedPreferences));
-  for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{textContent:'',attributes:{},writes:[],style:{},dataset:{},disabled:false,hidden:false,value:'',checked:false,listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
+  for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{_textContent:'',textWrites:[],get textContent(){return this._textContent;},set textContent(value){this._textContent=value;this.textWrites.push(value);},attributes:{},writes:[],style:{},dataset:{},disabled:false,hidden:false,value:'',checked:false,listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
   class EventSource{constructor(){this.closed=false;}addEventListener(){}close(){this.closed=true;}}
   const context=vm.createContext({document:{createElement:tag=>tag==='canvas'?{getContext:()=>drawing,toDataURL:()=> 'data:image/png;base64,c3ludGhldGlj'}:{click(){downloads.push({href:this.href,download:this.download});}},getElementById:id=>{assert.ok(nodes.has(id),id);return nodes.get(id);}},performance:{now:()=>now},URL,AbortSignal:{timeout:ms=>{timeouts.push(ms);return AbortSignal.timeout(ms);}},
     requestAnimationFrame:fn=>{const id=nextId++;frames.set(id,fn);return id;},cancelAnimationFrame:id=>frames.delete(id),
@@ -409,4 +409,72 @@ test('snapshot report excludes private state, URLs, session paths, serial number
  run.accept(s);run.click('snapshot');const rendered=run.canvasWrites.map(([value])=>value).join(' ');
  assert.doesNotMatch(rendered,/PRIVATE_|test-token|127\.0\.0\.1|https?:|\/private\/|review-123/);assert.match(rendered,/Verified after restart/);assert.deepEqual(controlCommands(run),[]);
  run.step(301);run.click('snapshot');assert.ok(run.canvasWrites.some(([value])=>/Last received input, stale/.test(value)));
+});
+
+
+const diagnosticEvidence=()=>({available:true,complete:true,note:'PRIVATE_NOTE',sticks:Object.fromEntries(['left','right'].map(side=>[side,{rows:[
+ {id:'quiet_peak',label:'PRIVATE_LABEL',before:4,after:2,delta:-2,unit:'%',direction:'lower'},
+ {id:'deadzone',label:'PRIVATE_LABEL',before:5,after:3,delta:-2,unit:'%',direction:'lower'},
+ {id:'circularity',label:'PRIVATE_LABEL',before:7.51,after:8.02,delta:.51,unit:'%',direction:'higher'},
+ {id:'symmetry',label:'PRIVATE_LABEL',before:0,after:0,delta:0,unit:'%',direction:'unchanged'},
+ {id:'release_peak',label:'PRIVATE_LABEL',before:8,after:9,delta:1,unit:'%',direction:'higher'}
+ ],notices:['PRIVATE_NOTICE']}]))});
+
+test('before and after tables show fixed metrics, percent values and percentage point changes without automatic actions',()=>{
+ const run=setup();run.accept({...run.input(),calibration:calibrationState('ready_to_save',{diagnostics:diagnosticEvidence()})});
+ assert.equal(run.nodes.get('calibration-diagnostics').hidden,false);assert.equal(run.nodes.get('calibration-legacy').hidden,true);
+ for(const side of ['left','right']){
+  assert.equal(run.nodes.get('diagnostic-'+side+'-quiet_peak-before').textContent,'4%');
+  assert.equal(run.nodes.get('diagnostic-'+side+'-quiet_peak-after').textContent,'2%');
+  assert.equal(run.nodes.get('diagnostic-'+side+'-quiet_peak-delta').textContent,'−2 pp');
+  assert.equal(run.nodes.get('diagnostic-'+side+'-symmetry-after').textContent,'0%');
+  assert.equal(run.nodes.get('diagnostic-'+side+'-symmetry-delta').textContent,'0 pp');
+  assert.equal(run.nodes.get('diagnostic-'+side+'-circularity-delta').textContent,'+0.51 pp');
+ }
+ assert.match(run.nodes.get('diagnostics-review').textContent,/peak increased.*another check before saving/);
+ assert.match(html,/Circularity is descriptive; lower is not always better/);assert.deepEqual(controlCommands(run),[]);
+ assert.doesNotMatch([...run.nodes.values()].map(node=>node.textContent).join(' '),/PRIVATE_/);
+});
+
+test('partial diagnostic rows keep missing, invalid and unpaired changes unavailable while preserving real zero',()=>{
+ const run=setup(),diagnostics=diagnosticEvidence();diagnostics.complete=false;
+ diagnostics.sticks.left.rows=[{id:'quiet_peak',before:null,after:0,delta:0},{id:'deadzone',before:0,after:0,delta:0},{id:'circularity',before:'7',after:-3,delta:3},{id:'symmetry',before:NaN,after:Infinity,delta:0}];
+ diagnostics.sticks.right.rows=[];
+ run.accept({...run.input(),calibration:calibrationState('measured',{diagnostics})});
+ assert.equal(run.nodes.get('diagnostic-left-quiet_peak-before').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-quiet_peak-after').textContent,'0%');assert.equal(run.nodes.get('diagnostic-left-quiet_peak-delta').textContent,'Unavailable');
+ assert.equal(run.nodes.get('diagnostic-left-deadzone-delta').textContent,'0 pp');
+ for(const id of ['circularity','symmetry','release_peak'])for(const field of ['before','after','delta'])assert.equal(run.nodes.get('diagnostic-left-'+id+'-'+field).textContent,'Unavailable');
+ assert.equal(run.nodes.get('diagnostic-right-quiet_peak-before').attributes['data-available'],'false');assert.match(run.nodes.get('diagnostics-review').textContent,/Some measurements are unavailable/);
+ assert.equal(run.nodes.get('calibration-save').disabled,true);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('diagnostic updates coalesce per frame and identical data causes no table DOM writes',()=>{
+ const run=setup({deferUi:true}),s={...run.input(),calibration:calibrationState('ready_to_save',{diagnostics:diagnosticEvidence()})};
+ run.accept(s);run.accept(s);assert.equal(run.nodes.get('diagnostic-left-quiet_peak-before').textWrites.length,0);run.step();
+ const nodes=[...run.nodes].filter(([id])=>id.startsWith('diagnostic'));const counts=()=>nodes.map(([,node])=>[node.textWrites.length,node.writes.length]);const before=counts();
+ for(let i=0;i<125;i++){run.accept({...s,latest:{...s.latest,lx:130+i%100}});run.step(8);}
+ assert.deepEqual(counts(),before);assert.deepEqual(controlCommands(run),[]);
+ const next=structuredClone(s);next.calibration.diagnostics.sticks.left.rows[0].after=1;next.calibration.diagnostics.sticks.left.rows[0].delta=-3;
+ run.accept(next);run.step();assert.equal(run.nodes.get('diagnostic-left-quiet_peak-after').textContent,'1%');
+ run.accept({...s,calibration:calibrationState('ready_to_save')});run.step();assert.equal(run.nodes.get('calibration-diagnostics').hidden,true);assert.equal(run.nodes.get('calibration-legacy').hidden,false);assert.match(run.nodes.get('calibration-left').textContent,/before resting peak 4%/);
+});
+
+test('diagnostic snapshots contain only fixed labels and measured numeric values',()=>{
+ const run=setup(),diagnostics=diagnosticEvidence();diagnostics.sticks.left.rows.push({id:'PRIVATE_ROW',label:'PRIVATE_LABEL',before:888,after:999,delta:111});
+ run.accept({...run.input(),calibration:calibrationState('ready_to_save',{diagnostics})});run.click('snapshot');
+ const rendered=run.canvasWrites.map(([value])=>value).join(' ');assert.doesNotMatch(rendered,/PRIVATE_|888|999/);
+ assert.match(rendered,/Left · Resting peak: before 4%; after 2%; change −2 pp/);assert.match(rendered,/Right · Release peak: before 8%; after 9%; change \+1 pp/);assert.match(rendered,/percentage points/);assert.deepEqual(controlCommands(run),[]);
+});
+
+
+test('diagnostic metric limits keep malformed large values unavailable without hiding valid boundaries',()=>{
+ const run=setup(),diagnostics=diagnosticEvidence();
+ diagnostics.sticks.right.rows[0].delta=1e20;
+ diagnostics.sticks.left.rows=[{id:'quiet_peak',before:150,after:150.01,delta:.01},{id:'deadzone',before:20.01,after:20,delta:-.01},{id:'circularity',before:1e20,after:2,delta:-1e20},{id:'symmetry',before:150,after:0,delta:-150},{id:'release_peak',before:0,after:150,delta:150}];
+ run.accept({...run.input(),calibration:calibrationState('ready_to_save',{diagnostics})});
+ assert.equal(run.nodes.get('diagnostic-right-quiet_peak-delta').textContent,'Unavailable');
+ assert.equal(run.nodes.get('diagnostic-left-quiet_peak-before').textContent,'150%');assert.equal(run.nodes.get('diagnostic-left-quiet_peak-after').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-quiet_peak-delta').textContent,'Unavailable');
+ assert.equal(run.nodes.get('diagnostic-left-deadzone-before').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-deadzone-after').textContent,'20%');assert.equal(run.nodes.get('diagnostic-left-deadzone-delta').textContent,'Unavailable');
+ assert.equal(run.nodes.get('diagnostic-left-circularity-before').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-circularity-delta').textContent,'Unavailable');assert.equal(run.nodes.get('diagnostic-left-symmetry-delta').textContent,'−150 pp');assert.equal(run.nodes.get('diagnostic-left-release_peak-delta').textContent,'+150 pp');
+ assert.deepEqual(controlCommands(run),[]);
 });
