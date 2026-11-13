@@ -1,0 +1,180 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+const html=readFileSync(new URL('../coach-card.html',import.meta.url),'utf8');
+const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replaceAll('__API_BASE__','http://127.0.0.1:27892').replaceAll('__TOKEN__','test-token');
+function setup({storedPreferences,blockedStorage=false,controlResponse}={}){
+  let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],nodes=new Map(),storage=new Map();
+  if(storedPreferences)storage.set('dualsense-coach-display',JSON.stringify(storedPreferences));
+  for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{textContent:'',attributes:{},writes:[],style:{},dataset:{},disabled:false,hidden:false,value:'',checked:false,listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
+  class EventSource{constructor(){this.closed=false;}addEventListener(){}close(){this.closed=true;}}
+  const context=vm.createContext({document:{getElementById:id=>{assert.ok(nodes.has(id),id);return nodes.get(id);}},performance:{now:()=>now},URL,AbortSignal,
+    requestAnimationFrame:fn=>{const id=nextId++;frames.set(id,fn);return id;},cancelAnimationFrame:id=>frames.delete(id),
+    setInterval:(fn,ms)=>{const id=nextId++;intervals.set(id,{fn,ms});return id;},clearInterval:id=>intervals.delete(id),
+    EventSource,fetch:(url,options)=>{requests.push({url:String(url),options});if(String(url).includes('/control')&&controlResponse)return Promise.resolve({ok:controlResponse.ok!==false,json:async()=>controlResponse.body??{connected:true,status:'idle'}});return new Promise(()=>{});},
+    localStorage:{getItem(key){if(blockedStorage)throw Error('storage blocked');return storage.get(key)??null;},setItem(key,value){if(blockedStorage)throw Error('storage blocked');storage.set(key,String(value));}},
+    window:{addEventListener:(name,fn)=>listeners.set(name,fn),matchMedia:()=>({matches:false})},console});
+  vm.runInContext(script,context);
+  const input=(lx=128)=>({connected:true,status:'idle',latest:{lx,ly:128,rx:128,ry:128,mode:'usb'},ageMs:0,instruction:'Move the sticks',progress:0,details:{}});
+  return {context,nodes,frames,intervals,listeners,requests,input,storage,change(id,value){const node=nodes.get(id);assert.ok(node,id);if(typeof value==='boolean')node.checked=value;else node.value=value;node.listeners.get('change')?.({target:node});},click(id){nodes.get(id).listeners.get('click')?.();},accept(s){context.input=s;vm.runInContext("accept(input,'sse')",context);},step(ms=16){now+=ms;const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(now);},at(value){now=value;}};
+}
+
+test('multiple feed updates coalesce into one animation-frame plot update',()=>{
+ const run=setup(),dot=run.nodes.get('left-dot');
+ run.accept(run.input(160));run.accept(run.input(200));run.accept(run.input(240));
+ assert.equal(dot.writes.filter(([k])=>k==='cx').length,0);
+ assert.equal(run.frames.size,1);run.step();
+ assert.equal(dot.writes.filter(([k])=>k==='cx').length,1);
+ assert.equal(run.nodes.get('instruction').textContent,'Move the sticks');
+});
+test('raw numeric readings are throttled while stick dots continue at frame rate',()=>{
+ const run=setup();run.accept(run.input(160));run.step();
+ const initial=run.nodes.get('left-values').textContent;
+ run.accept(run.input(240));run.step();assert.equal(run.nodes.get('left-values').textContent,initial);
+ run.step(100);assert.match(run.nodes.get('left-values').textContent,/\+0\.88/);
+});
+test('stale input neutralizes dots and trails within300ms',()=>{
+ const run=setup();run.accept(run.input(240));run.step();assert.equal(run.nodes.get('left-dot').attributes.visibility,'visible');
+ run.step(285);assert.equal(run.nodes.get('left-dot').attributes.visibility,'hidden');
+ assert.equal(run.nodes.get('left-trail').attributes.points,'');
+});
+test('unchanged samples avoid redundant SVG and progress aria writes',()=>{
+ const run=setup();const s=run.input(160);run.accept(s);run.step();
+ const dot=run.nodes.get('left-dot'),trail=run.nodes.get('left-trail'),progress=run.nodes.get('progress');
+ const counts=[dot.writes.length,trail.writes.length,progress.writes.length];
+ for(let i=0;i<5;i++){run.accept(s);run.step();}
+ assert.deepEqual([dot.writes.length,trail.writes.length,progress.writes.length],counts);
+});
+test('pagehide stops frame loop, timers, stream and further polling',async()=>{
+ const run=setup();run.accept(run.input());run.step();
+ run.listeners.get('pagehide')();assert.equal(run.frames.size,0);assert.equal(run.intervals.size,0);
+ const before=run.requests.length;await vm.runInContext('poll()',run.context);assert.equal(run.requests.length,before);
+});
+test('a card restored from browser cache reconnects and has exactly one frame loop',()=>{
+  const run=setup();run.listeners.get('pagehide')();assert.equal(run.frames.size,0);
+  assert.ok(run.listeners.has('pageshow'));run.listeners.get('pageshow')({persisted:true});
+  assert.equal(run.frames.size,1);assert.equal(run.intervals.size,2);
+  run.listeners.get('pageshow')({persisted:true});assert.equal(run.frames.size,1);assert.equal(run.intervals.size,2);
+});
+test('fallback polling targets33ms and measured metrics post every5s only with fresh input',async()=>{
+ const run=setup();assert.ok([...run.intervals.values()].some(i=>i.ms===33));
+ const metricTimer=[...run.intervals.values()].find(i=>i.ms===5000);assert.ok(metricTimer);
+ metricTimer.fn();assert.ok(!run.requests.some(r=>r.url.includes('/metrics')));
+ run.accept(run.input());run.step();metricTimer.fn();
+ const metrics=run.requests.find(r=>r.url.includes('/metrics'));assert.ok(metrics);
+ assert.deepEqual(Object.keys(JSON.parse(metrics.options.body)).sort(),['clientAgeMs','fps','receiveHz']);
+});
+test('checklist reflects complete, current and paused steps without changing its labels',()=>{
+ const run=setup(),s=run.input();s.status='paused';s.steps=[{id:'rest',label:'Settle',status:'complete'},{id:'range-clockwise',label:'Clockwise',status:'current'}];run.accept(s);
+ assert.equal(run.nodes.get('step-rest').dataset.status,'complete');assert.equal(run.nodes.get('step-range-clockwise').attributes['aria-current'],'step');
+ assert.equal(run.nodes.get('step-range-clockwise').dataset.paused,'true');assert.equal(run.nodes.get('step-buttons').dataset.status,'pending');
+});
+test('10x offscale diagonal stays inside the circle and retains true numeric values',()=>{
+ const run=setup(),s=run.input(240);s.latest.ly=240;vm.runInContext('zoom=10',run.context);run.accept(s);run.step();
+ const dot=run.nodes.get('left-dot');const r=Math.hypot(Number(dot.attributes.cx)-80,Number(dot.attributes.cy)-59);
+ assert.ok(r<=47.01);assert.equal(run.nodes.get('left-detail').textContent,'Outside 10× window');assert.match(run.nodes.get('left-values').textContent,/X \+0\.88   Y \+0\.88/);
+});
+test('display options bound or hide trails and clear their history',()=>{
+ const run=setup();run.change('trail-mode','short');
+ for(let i=0;i<80;i++){run.accept(run.input(130+i));run.step();}
+ assert.equal(run.nodes.get('left-trail').attributes.points.split(' ').length,40);
+ run.click('clear-trail');assert.equal(run.nodes.get('left-trail').attributes.points,'');
+ run.change('trail-mode','off');run.accept(run.input(230));run.step();assert.equal(run.nodes.get('left-trail').attributes.points,'');
+});
+test('focus, center rings, units and performance options change display without altering raw input',()=>{
+ const run=setup(),s=run.input(240);s.latest.ly=3;
+ run.accept(s);run.change('view-mode','left');run.change('center-rings',false);run.change('number-units','raw');run.change('show-rates',false);run.step();
+ assert.equal(run.nodes.get('right-plot').hidden,true);assert.equal(run.nodes.get('left-plot').hidden,false);
+ assert.equal(run.nodes.get('plots').dataset.view,'left');assert.equal(run.nodes.get('left-center-ring').attributes.visibility,'hidden');
+ assert.equal(run.nodes.get('rates').hidden,true);assert.equal(run.nodes.get('left-values').textContent,'X 240   Y 3');
+ assert.equal(s.latest.lx,240);assert.equal(s.latest.ly,3);
+});
+test('trigger bars and held button counts use actual input and neutralize on stale input',()=>{
+ const run=setup(),s=run.input();s.latest.l2=255;s.latest.r2=128;s.latest.buttons=0b100001;
+ run.accept(s);run.step();assert.equal(run.nodes.get('l2-fill').style.width,'100%');assert.equal(run.nodes.get('r2-fill').style.width,'50%');
+ assert.equal(run.nodes.get('button-count').textContent,'2 held');
+ run.step(301);assert.equal(run.nodes.get('l2-fill').style.width,'0%');assert.equal(run.nodes.get('button-count').textContent,'—');
+});
+test('only whitelisted display preferences persist and blocked storage is harmless',()=>{
+ const run=setup({storedPreferences:{trails:'short',view:'right',units:'raw',rings:false,rates:false,token:'private',sessionId:'private'}});
+ run.change('trail-mode','long');const saved=JSON.parse(run.storage.get('dualsense-coach-display'));
+ assert.deepEqual(Object.keys(saved).sort(),['rates','rings','trails','units','view']);assert.equal(saved.trails,'long');assert.equal(run.nodes.get('view-mode').value,'right');
+ const blocked=setup({blockedStorage:true});assert.doesNotThrow(()=>blocked.change('trail-mode','off'));
+});
+
+test('lightbar selection and brightness never send a command until Apply',()=>{
+ const run=setup();run.accept(run.input());const before=run.requests.length;
+ run.click('lightbar-blue');run.change('lightbar-color','#204080');run.change('lightbar-brightness','50');
+ assert.equal(run.requests.length,before);assert.ok(!run.storage.has('lightbar'));
+ run.click('lightbar-apply');const request=run.requests.find(r=>r.url.includes('/control'));assert.ok(request);
+ assert.deepEqual(JSON.parse(request.options.body),{r:16,g:32,b:64,action:'lightbar'});
+ assert.equal(run.requests.filter(r=>r.url.includes('/control')).length,1);
+ assert.equal(run.nodes.get('lightbar-apply').disabled,true);
+});
+
+test('lightbar commands require fresh input and valid selector values',()=>{
+ const run=setup();assert.equal(run.nodes.get('lightbar-apply').disabled,true);
+ run.accept(run.input());assert.equal(run.nodes.get('lightbar-apply').disabled,false);
+ run.change('lightbar-color','not-a-color');run.click('lightbar-apply');
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));assert.match(run.nodes.get('lightbar-status').textContent,/valid color/i);
+ run.change('lightbar-color','#ffffff');run.change('lightbar-brightness','101');run.click('lightbar-apply');
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));assert.match(run.nodes.get('lightbar-status').textContent,/brightness/i);
+ run.step(301);assert.equal(run.nodes.get('lightbar-apply').disabled,true);
+});
+
+test('battery and firmware remain unavailable until reported; effect preferences stay private',()=>{
+ const run=setup();run.accept(run.input());
+ assert.equal(run.nodes.get('controller-battery').textContent,'Unavailable');assert.equal(run.nodes.get('controller-firmware').textContent,'Unavailable');
+ const s=run.input();s.battery={level:75,status:'charging'};s.firmware={build:'Synthetic build'};s.effects={lightbar:{r:10,g:20,b:30,sentAt:'synthetic-time',commandSent:true,deviceConfirmed:false}};run.accept(s);
+ assert.equal(run.nodes.get('controller-battery').textContent,'75% · Charging');assert.equal(run.nodes.get('controller-firmware').textContent,'Synthetic build');
+ assert.equal(run.nodes.get('lightbar-status').textContent,'Sent · temporary');
+ run.change('trail-mode','short');const saved=JSON.parse(run.storage.get('dualsense-coach-display'));
+ assert.deepEqual(Object.keys(saved).sort(),['rates','rings','trails','units','view']);
+});
+
+test('lightbar errors are clear and a successful reply is described only as sent',async()=>{
+ const failed=setup({controlResponse:{ok:false,body:{error:'Synthetic controller unavailable'}}});failed.accept(failed.input());failed.click('lightbar-apply');
+ await new Promise(r=>setImmediate(r));assert.match(failed.nodes.get('lightbar-status').textContent,/Synthetic controller unavailable/);assert.equal(failed.nodes.get('lightbar-apply').disabled,false);
+ const success=setup({controlResponse:{body:{connected:true,status:'idle',effects:{lightbar:{r:1,g:2,b:3,sentAt:'new',commandSent:true,deviceConfirmed:false}}}}});success.accept(success.input());success.click('lightbar-apply');
+ await new Promise(r=>setImmediate(r));assert.equal(success.nodes.get('lightbar-status').textContent,'Sent · temporary');assert.doesNotMatch(success.nodes.get('lightbar-status').textContent,/confirmed|saved|applied/i);
+});
+
+test('disconnected controller metadata is unavailable even when old values remain',()=>{
+ const run=setup(),s=run.input();s.battery={level:75,status:'charging'};s.firmware={build:'Synthetic build'};run.accept(s);
+ assert.equal(run.nodes.get('controller-battery').textContent,'75% · Charging');
+ s.connected=false;run.accept(s);
+ assert.equal(run.nodes.get('controller-battery').textContent,'Unavailable');assert.equal(run.nodes.get('controller-firmware').textContent,'Unavailable');
+});
+
+test('trigger selection stays local until Apply and custom values are sent once',()=>{
+ const run=setup();run.accept(run.input());const before=run.requests.length;
+ run.change('trigger-preset','custom');run.change('trigger-target','left');run.change('trigger-position','3');run.change('trigger-strength','7');
+ assert.equal(run.requests.length,before);assert.equal(run.nodes.get('trigger-custom').hidden,false);
+ run.click('trigger-apply');const request=run.requests.find(r=>r.url.includes('/control'));assert.ok(request);
+ assert.deepEqual(JSON.parse(request.options.body),{preset:'custom',target:'left',position:3,strength:7,action:'triggers'});
+ assert.equal(run.requests.filter(r=>r.url.includes('/control')).length,1);
+});
+
+test('trigger effects are locked during measurement while lightbar remains available',()=>{
+ const run=setup(),s=run.input();s.status='running';run.accept(s);
+ assert.equal(run.nodes.get('trigger-apply').disabled,true);assert.equal(run.nodes.get('trigger-reset').disabled,true);
+ assert.equal(run.nodes.get('lightbar-apply').disabled,false);assert.match(run.nodes.get('trigger-guide').textContent,/pause/i);
+ run.click('trigger-apply');run.click('trigger-reset');assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+ s.status='paused';run.accept(s);assert.equal(run.nodes.get('trigger-apply').disabled,false);
+ run.click('trigger-reset');const request=run.requests.find(r=>r.url.includes('/control'));assert.deepEqual(JSON.parse(request.options.body),{preset:'off',target:'both',action:'triggers'});
+});
+
+test('invalid custom trigger parameters do not send a command',()=>{
+ const run=setup();run.accept(run.input());run.change('trigger-preset','custom');run.change('trigger-position','10');run.click('trigger-apply');
+ assert.ok(!run.requests.some(r=>r.url.includes('/control')));assert.match(run.nodes.get('trigger-status').textContent,/position/i);
+ run.change('trigger-position','3');run.change('trigger-strength','0');run.click('trigger-apply');assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+ run.change('trigger-strength','6');run.change('trigger-target','unsupported');run.click('trigger-apply');assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+});
+
+test('trigger success and errors describe a send rather than physical calibration',async()=>{
+ const run=setup({controlResponse:{body:{connected:true,status:'idle',effects:{triggers:{preset:'firm',target:'both',sentAt:'synthetic',commandSent:true,deviceConfirmed:false}}}}});run.accept(run.input());run.change('trigger-preset','firm');run.click('trigger-apply');
+ await new Promise(r=>setImmediate(r));assert.equal(run.nodes.get('trigger-status').textContent,'Sent · temporary');
+ const failed=setup({controlResponse:{ok:false,body:{error:'Synthetic trigger failure'}}});failed.accept(failed.input());failed.click('trigger-reset');await new Promise(r=>setImmediate(r));assert.match(failed.nodes.get('trigger-status').textContent,/Synthetic trigger failure/);
+});

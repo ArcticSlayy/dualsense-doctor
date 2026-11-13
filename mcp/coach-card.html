@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DualSense live coach</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;background:transparent;color:var(--foreground,#253040);font:14px/1.4 var(--font-sans,"Segoe UI",sans-serif);--coach-muted:color-mix(in srgb,var(--foreground,#253040) 76%,transparent);--coach-line:color-mix(in srgb,var(--foreground,#253040) 34%,transparent)}
+    button{font:inherit;min-height:40px;border:1px solid var(--border,#a5adb8);border-radius:7px;padding:7px 12px;color:var(--foreground,#253040);background:var(--secondary,#eef1f5);cursor:pointer}
+    button:hover:not(:disabled){border-color:var(--primary,#6750bd)}button:focus-visible,select:focus-visible,summary:focus-visible,input:focus-visible{outline:3px solid var(--ring,#6750bd);outline-offset:3px}button:disabled{opacity:.48;cursor:not-allowed}[hidden]{display:none!important}
+    button.primary{background:var(--primary,#6750bd);color:var(--primary-foreground,#ffffff);border-color:transparent;font-weight:650}
+    ::selection{background:var(--primary,#6750bd);color:var(--primary-foreground,#ffffff)}
+    .coach{width:100%;padding:2px 0}.top,.heading,.controls,.foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.top{justify-content:space-between;gap:6px 16px}
+    .identity{font-weight:650}.connection{color:var(--coach-muted);font-size:12px}.connection[data-live="true"]{color:var(--success,#8ad9b6)}.rates{color:var(--coach-muted);font:12px var(--font-mono,Consolas,monospace);font-variant-numeric:tabular-nums;margin-left:auto}
+    .connection-button{font-size:12px;min-height:32px;padding:4px 9px}.heading{justify-content:space-between;align-items:flex-start;margin-top:12px;gap:8px}
+    h2{font-size:20px;line-height:1.25;letter-spacing:-.025em;margin:0;max-width:48ch;font-weight:650;flex:1 1 280px;text-wrap:balance}.timer{font-variant-numeric:tabular-nums;min-width:48px;text-align:right;color:var(--coach-muted);padding-top:2px}
+    .progress{height:5px;border-radius:2px;overflow:hidden;background:var(--secondary,#eef1f5);margin-top:12px}.progress span{display:block;height:100%;width:0;background:var(--primary,#6750bd)}
+    .steps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px 10px;padding:0;margin:12px 0 4px;list-style:none;font-size:12px;color:var(--coach-muted)}.steps li{display:flex;gap:5px;align-items:center;min-width:0;white-space:nowrap}.step-mark{width:9px;height:9px;flex:0 0 9px;border:1px solid var(--coach-line);border-radius:50%}.steps li[data-status="current"]{color:var(--foreground,#253040);font-weight:650}.steps li[data-status="current"] .step-mark{border-color:var(--primary,#6750bd);background:var(--primary,#6750bd)}.steps li[data-status="complete"] .step-mark{background:var(--success,#8ad9b6);border-color:var(--success,#8ad9b6)}.steps li[data-paused="true"] .step-mark{background:transparent;border-color:var(--warning,#f3c786)}
+    .plots{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:440px;margin:8px auto 0}.plot{min-width:0;margin:0}.plot figcaption{text-align:center;font-size:12px;font-weight:650;color:var(--coach-muted)}
+    svg{display:block;width:100%;height:112px;overflow:visible}.rim,.axis,.center-ring{fill:none;stroke:var(--coach-line);stroke-width:1}.center-ring{stroke-dasharray:2 3}.axis{opacity:.8}.trail{fill:none;stroke:var(--chart-1,#6750bd);stroke-width:1.2;opacity:.58}.dot{fill:var(--chart-1,#6750bd);stroke:var(--background,#ffffff);stroke-width:1.5}.right .trail,.right .dot{stroke:var(--chart-2,#176e8a)}.right .dot{fill:var(--chart-2,#176e8a);stroke:var(--background,#ffffff)}
+    .values{font:12px var(--font-mono,Consolas,monospace);fill:var(--coach-muted);font-variant-numeric:tabular-nums}.detail{font-size:12px;min-height:16px;text-align:center;color:var(--coach-muted)}
+    .feedback{min-height:34px;margin:8px 0 10px;font-size:13px;line-height:1.35;color:var(--coach-muted)}.feedback[data-warning="true"]{color:var(--warning,#f3c786)}
+    .controls{gap:7px}.zoom{margin-left:auto;min-width:69px;font-size:12px}.foot{margin-top:10px;justify-content:space-between;gap:3px 12px;font-size:12px;color:var(--coach-muted)}
+    .steps li{padding:3px 0}.steps li[data-status="current"]{color:var(--primary,#6750bd)}.steps li[data-status="complete"] .step-mark{position:relative;width:11px;height:11px;flex-basis:11px}.steps li[data-status="complete"] .step-mark:after{content:"";position:absolute;left:2px;top:2px;width:5px;height:3px;border-left:1.5px solid var(--success-foreground,#173a2b);border-bottom:1.5px solid var(--success-foreground,#173a2b);transform:rotate(-45deg)}
+    .plots[data-view="left"],.plots[data-view="right"]{grid-template-columns:1fr;max-width:240px}.plots[data-view="left"] svg,.plots[data-view="right"] svg{height:132px}
+    .input-strip{display:grid;grid-template-columns:minmax(85px,1fr) minmax(85px,1fr) auto;align-items:center;gap:16px;max-width:440px;margin:7px auto 0;font-size:12px;color:var(--coach-muted)}.trigger{display:grid;grid-template-columns:20px 1fr 30px;align-items:center;gap:6px}.trigger-value{font-variant-numeric:tabular-nums;text-align:right}.trigger-track{height:4px;background:var(--secondary,#eef1f5);overflow:hidden;border-radius:2px}.trigger-fill{display:block;height:4px;width:0;background:var(--chart-1,#6750bd)}.trigger.right .trigger-fill{background:var(--chart-2,#176e8a)}.button-badge{font-variant-numeric:tabular-nums;white-space:nowrap}.button-badge[data-active="true"]{color:var(--primary,#6750bd);font-weight:650}
+    .options{font-size:12px}.options summary{list-style:none;cursor:pointer;min-height:40px;padding:9px 11px;border:1px solid var(--border,#a5adb8);border-radius:7px;user-select:none}.options summary::-webkit-details-marker{display:none}.options summary:hover{border-color:var(--primary,#6750bd)}.options summary:after{content:"";display:inline-block;width:5px;height:5px;margin:0 0 2px 8px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg)}.options[open]{flex-basis:100%}.options[open] summary{display:inline-block}.options[open] summary:after{transform:rotate(225deg);margin-bottom:0}.option-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px;padding:14px 0 4px}.option-field{display:grid;gap:5px;color:var(--coach-muted)}select{width:100%;min-height:34px;border:1px solid var(--border,#a5adb8);border-radius:5px;padding:4px 7px;background:var(--secondary,#eef1f5);color:var(--foreground,#253040);font:inherit}.option-toggle{display:flex;align-items:center;gap:7px;min-height:34px}.option-toggle input{accent-color:var(--primary,#6750bd);margin:0;width:15px;height:15px}.option-grid button{font-size:12px;min-height:34px;justify-self:start}.option-note{margin:10px 0 0;color:var(--coach-muted);font-size:12px}
+    .controller-controls{margin-top:8px}.controller-controls summary{display:inline-block}.controller-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;padding:14px 0 4px}.controller-title{margin:0 0 8px;font-size:13px;font-weight:650}.palette{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 12px}.palette button{display:grid;place-items:center;min-height:36px;width:36px;padding:5px}.palette button[aria-pressed="true"]{border-color:var(--primary,#6750bd);outline:1px solid var(--primary,#6750bd);outline-offset:1px}.swatch{width:19px;height:19px;border:1px solid var(--coach-line);border-radius:50%}.color-fields,.trigger-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}.color-fields label,.trigger-fields label{display:grid;gap:5px;color:var(--coach-muted)}input[type="color"]{width:100%;height:34px;padding:3px;border:1px solid var(--border,#a5adb8);border-radius:5px;background:var(--secondary,#eef1f5);cursor:pointer}input[type="range"]{width:100%;margin:8px 0 0;accent-color:var(--primary,#6750bd)}.brightness-label{display:flex;justify-content:space-between;gap:8px}.effect-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-top:12px}.effect-actions button{font-size:12px;min-height:34px}.effect-status{font-size:12px;color:var(--coach-muted)}.effect-status[data-error="true"]{color:var(--destructive,#b63f4d)}.controller-info{grid-column:1/-1;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px;border-top:1px solid var(--border,#a5adb8);padding-top:12px;align-content:start}.controller-info div{display:grid;gap:3px}.controller-info dt{color:var(--coach-muted)}.controller-info dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.controller-note,.trigger-guide{margin:12px 0 0;color:var(--coach-muted);font-size:12px;max-width:64ch}.trigger-custom{margin-top:10px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(max-width:520px){.steps{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px 10px}.rates{margin-left:0}.option-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.input-strip{gap:10px}}@media(max-width:420px){h2{font-size:18px;flex-basis:220px}.plots{gap:8px}svg{height:124px}.controls button{padding-inline:8px;font-size:12px;min-height:38px}.zoom{margin-left:0}.foot{display:block}.foot span{display:block;margin-top:3px}.top .identity{font-size:13px}.connection-button{min-height:36px}.feedback{min-height:48px}.options summary{padding-inline:9px;min-height:38px}.input-strip{gap:8px}}
+    @media(max-width:520px){.controller-grid{grid-template-columns:1fr;gap:16px}.controller-info{grid-template-columns:1fr 1fr}.palette{gap:8px}.palette button{width:40px;min-height:40px}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+  </style>
+</head>
+<body>
+  <main class="coach" aria-label="Live DualSense stick coaching">
+    <div class="top"><span class="identity">DualSense Studio</span><span class="connection" id="connection">Connecting…</span><span class="rates" id="rates" aria-hidden="true">— render FPS · — Hz feed</span><button id="connect" class="connection-button" type="button">Connect controller</button></div>
+    <div class="heading"><h2 id="instruction">Live stick check</h2><span class="timer" id="timer" aria-hidden="true">—</span></div>
+    <div class="progress" role="progressbar" aria-label="Guided check progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress"><span id="progress-fill"></span></div>
+    <ol class="steps" aria-label="Check steps"><li id="step-rest" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Settle</li><li id="step-range-clockwise" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Clockwise</li><li id="step-range-counterclockwise" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Counterclockwise</li><li id="step-release" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Release</li><li id="step-buttons" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Buttons</li><li id="step-verify" data-status="pending"><span class="step-mark" aria-hidden="true"></span>Verify</li></ol>
+    <div class="plots" id="plots" data-view="both">
+      <figure class="plot" id="left-plot"><figcaption>Left stick</figcaption><svg viewBox="0 0 160 132" role="img" aria-label="Live left stick position and recent trail"><defs><clipPath id="left-clip"><circle cx="80" cy="59" r="51"/></clipPath></defs><circle class="rim" cx="80" cy="59" r="52"/><circle class="center-ring" id="left-center-ring" cx="80" cy="59" r="16"/><path class="axis" d="M28 59H132M80 7V111"/><g clip-path="url(#left-clip)"><polyline class="trail" id="left-trail"/><circle class="dot" id="left-dot" cx="80" cy="59" r="4" visibility="hidden"/></g><text class="values" id="left-values" x="80" y="129" text-anchor="middle">X —   Y —</text></svg><div class="detail" id="left-detail">Waiting for fresh input</div></figure>
+      <figure class="plot right" id="right-plot"><figcaption>Right stick</figcaption><svg viewBox="0 0 160 132" role="img" aria-label="Live right stick position and recent trail"><defs><clipPath id="right-clip"><circle cx="80" cy="59" r="51"/></clipPath></defs><circle class="rim" cx="80" cy="59" r="52"/><circle class="center-ring" id="right-center-ring" cx="80" cy="59" r="16"/><path class="axis" d="M28 59H132M80 7V111"/><g clip-path="url(#right-clip)"><polyline class="trail" id="right-trail"/><circle class="dot" id="right-dot" cx="80" cy="59" r="4" visibility="hidden"/></g><text class="values" id="right-values" x="80" y="129" text-anchor="middle">X —   Y —</text></svg><div class="detail" id="right-detail">Waiting for fresh input</div></figure>
+    </div>
+    <div class="input-strip" aria-label="Live trigger and button input"><div class="trigger"><span>L2</span><span class="trigger-track" role="progressbar" id="l2-meter" aria-label="Left trigger pressure" aria-valuemin="0" aria-valuemax="255" aria-valuenow="0"><span class="trigger-fill" id="l2-fill"></span></span><span class="trigger-value" id="l2-value">—</span></div><div class="trigger right"><span>R2</span><span class="trigger-track" role="progressbar" id="r2-meter" aria-label="Right trigger pressure" aria-valuemin="0" aria-valuemax="255" aria-valuenow="0"><span class="trigger-fill" id="r2-fill"></span></span><span class="trigger-value" id="r2-value">—</span></div><span class="button-badge" id="button-badge" data-active="false">Buttons <span id="button-count">—</span></span></div>
+    <p class="feedback" id="feedback" data-warning="false">Start once, then follow the prompts. The coach checks each movement before continuing.</p>
+    <div class="controls"><button id="start" class="primary" type="button" disabled>Start check</button><button id="pause" type="button" disabled>Pause</button><button id="stop" type="button" disabled>Stop</button><button id="zoom" class="zoom" type="button" aria-pressed="false">1× view</button><details class="options" id="display-options"><summary aria-label="Display options">Options</summary><div class="option-grid"><label class="option-field">Motion trail<select id="trail-mode"><option value="off">Off</option><option value="short">Short</option><option value="long">Long</option></select></label><label class="option-field">Stick view<select id="view-mode"><option value="both">Both sticks</option><option value="left">Left only</option><option value="right">Right only</option></select></label><label class="option-field">Axis values<select id="number-units"><option value="normalized">Normalized −1 to +1</option><option value="raw">Raw 0–255</option></select></label><label class="option-toggle"><input id="center-rings" type="checkbox" checked>Center rings</label><label class="option-toggle"><input id="show-rates" type="checkbox" checked>FPS and feed rate</label><button id="clear-trail" type="button">Clear trails</button></div><p class="option-note">Display changes only. Measurements always use the original controller readings.</p></details></div>
+    <details class="options controller-controls" id="controller-controls"><summary>Controller controls</summary><div class="controller-grid"><section aria-labelledby="lightbar-title"><h3 class="controller-title" id="lightbar-title">Lightbar</h3><div class="palette" role="group" aria-label="Choose a lightbar color"><button id="lightbar-violet" type="button" aria-label="Select violet lightbar" aria-pressed="true" title="Violet"><span class="swatch" style="background:#8057ff" aria-hidden="true"></span></button><button id="lightbar-blue" type="button" aria-label="Select blue lightbar" aria-pressed="false" title="Blue"><span class="swatch" style="background:#2f7dff" aria-hidden="true"></span></button><button id="lightbar-cyan" type="button" aria-label="Select cyan lightbar" aria-pressed="false" title="Cyan"><span class="swatch" style="background:#20c3c9" aria-hidden="true"></span></button><button id="lightbar-white" type="button" aria-label="Select white lightbar" aria-pressed="false" title="White"><span class="swatch" style="background:#ffffff" aria-hidden="true"></span></button><button id="lightbar-red" type="button" aria-label="Select red lightbar" aria-pressed="false" title="Red"><span class="swatch" style="background:#ef5567" aria-hidden="true"></span></button><button id="lightbar-off" type="button" aria-label="Select lightbar off" aria-pressed="false" title="Off"><span class="swatch" style="background:#000000" aria-hidden="true"></span></button></div><div class="color-fields"><label>Custom color<input id="lightbar-color" type="color" value="#8057ff"></label><label><span class="brightness-label">Brightness <output id="lightbar-brightness-value">100%</output></span><input id="lightbar-brightness" type="range" min="0" max="100" step="1" value="100"></label></div><div class="effect-actions"><button id="lightbar-apply" type="button" disabled>Apply color</button><span class="effect-status" id="lightbar-status" data-error="false" role="status">Not set this session</span></div></section><section aria-labelledby="trigger-effects-title"><h3 class="controller-title" id="trigger-effects-title">Adaptive triggers</h3><div class="trigger-fields"><label>Effect<select id="trigger-preset"><option value="off">Off</option><option value="light">Light</option><option value="firm">Firm</option><option value="max">Maximum</option><option value="weapon">Weapon</option><option value="custom">Custom resistance</option></select></label><label>Target<select id="trigger-target"><option value="both">Both triggers</option><option value="left">Left trigger</option><option value="right">Right trigger</option></select></label></div><div class="trigger-fields trigger-custom" id="trigger-custom" hidden><label><span class="brightness-label">Wall position <output id="trigger-position-value">2</output></span><input id="trigger-position" type="range" min="0" max="9" step="1" value="2"></label><label><span class="brightness-label">Strength <output id="trigger-strength-value">6</output></span><input id="trigger-strength" type="range" min="1" max="8" step="1" value="6"></label></div><div class="effect-actions"><button id="trigger-apply" type="button" disabled>Apply triggers</button><button id="trigger-reset" type="button" disabled>Reset / off</button><span class="effect-status" id="trigger-status" data-error="false" role="status">Not set this session</span></div><p class="trigger-guide" id="trigger-guide">Requires adaptive-trigger motors. This temporary resistance effect is not analog-trigger calibration.</p></section><dl class="controller-info"><div><dt>Battery</dt><dd id="controller-battery">Unavailable</dd></div><div><dt>Firmware build</dt><dd id="controller-firmware">Unavailable</dd></div></dl></div><p class="controller-note">Effects change only when you apply them. Games or a power cycle may replace them; a successful send is not physical-device verification.</p></details>
+    <div class="foot"><span>Measurements and temporary effects · no calibration saved</span><span>Circularity reference: 7–9% · symmetry matters</span></div>
+    <span class="sr-only" aria-live="polite" aria-atomic="true" id="announcement"></span>
+  </main>
+  <script>
+    'use strict';
+    const API_BASE='__API_BASE__',TOKEN='__TOKEN__';
+    const nodes=new Map();
+    const $=id=>{if(!nodes.has(id))nodes.set(id,document.getElementById(id));return nodes.get(id);};
+    const axes=['lx','ly','rx','ry'];
+    const trails={left:[],right:[]};
+    const preferenceKey='dualsense-coach-display';
+    let preferences={trails:'long',view:'both',units:'normalized',rings:true,rates:true};
+    try{const saved=JSON.parse(localStorage.getItem(preferenceKey)||'null');if(saved&&typeof saved==='object'){for(const [key,allowed] of Object.entries({trails:['off','short','long'],view:['both','left','right'],units:['normalized','raw']}))if(allowed.includes(saved[key]))preferences[key]=saved[key];for(const key of ['rings','rates'])if(typeof saved[key]==='boolean')preferences[key]=saved[key];}}catch{}
+    let state=null,lastMessageAt=0,lastSseAt=0,lastSource='',source=null,pollTimer=null,metricsTimer=null,polling=false,pending=false,zoom=1;
+    let lastInstruction='',lastWarning='',stickyUntil=0,lastAnnounced='',lastSession='';
+    let lastEffectAt='',lightbarPending=false,lastTriggerAt='',triggerPending=false;
+    const lightbarPresets={violet:'#8057ff',blue:'#2f7dff',cyan:'#20c3c9',white:'#ffffff',red:'#ef5567',off:'#000000'};
+    let rafId=null,stopped=false,wasLive=false,lastNumbersAt=-Infinity,lastControlKey='',frameCount=0,receiveCount=0,rateSince=performance.now(),fps=0,receiveHz=0;
+    const stepNames=['rest','range-clockwise','range-counterclockwise','release','buttons','verify'];
+    const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+    const norm=v=>(v-128)/127;
+    const fmt=v=>(v>=0?'+':'')+v.toFixed(2);
+    function text(id,value){const node=$(id);if(node.textContent!==String(value))node.textContent=String(value);}
+    function attr(node,key,value){value=String(value);if(node.getAttribute(key)!==value)node.setAttribute(key,value);}
+    function lightbarSelection(){const color=$('lightbar-color').value.toLowerCase();for(const [name,value]of Object.entries(lightbarPresets))attr($('lightbar-'+name),'aria-pressed',color===value);text('lightbar-brightness-value',$('lightbar-brightness').value+'%');}
+    function triggerSelection(){const custom=$('trigger-preset').value==='custom',locked=pending||!fresh()||state?.status==='running';$('trigger-custom').hidden=!custom;$('trigger-position').disabled=locked||!custom;$('trigger-strength').disabled=locked||!custom;text('trigger-position-value',$('trigger-position').value);text('trigger-strength-value',$('trigger-strength').value);text('trigger-guide',state?.status==='running'?'Pause the check before changing trigger effects.':'Requires adaptive-trigger motors. Temporary resistance is not analog-trigger calibration.');}
+    function controllerInfo(){
+      const battery=state?.connected?state.battery:null,level=battery?.level;
+      const status={charging:'Charging',full:'Full',discharging:'Discharging'}[battery?.status];
+      text('controller-battery',Number.isFinite(level)&&level>=0&&level<=100?Math.round(level)+'%'+(status?' · '+status:''):'Unavailable');
+      text('controller-firmware',state?.connected&&typeof state.firmware?.build==='string'&&state.firmware.build.trim()?state.firmware.build.trim():'Unavailable');
+      const effect=state?.effects?.lightbar;
+      if(!lightbarPending&&effect?.commandSent===true&&typeof effect.sentAt==='string'&&effect.sentAt!==lastEffectAt){lastEffectAt=effect.sentAt;text('lightbar-status','Sent · temporary');$('lightbar-status').dataset.error='false';}
+      const triggers=state?.effects?.triggers;
+      if(!triggerPending&&triggers?.commandSent===true&&typeof triggers.sentAt==='string'&&triggers.sentAt!==lastTriggerAt){lastTriggerAt=triggers.sentAt;text('trigger-status','Sent · temporary');$('trigger-status').dataset.error='false';}
+    }
+    function url(path){const u=new URL(path,API_BASE);u.searchParams.set('token',TOKEN);return u.href;}
+    function fresh(){return Boolean(state?.connected&&state.latest&&axes.every(a=>Number.isInteger(state.latest[a])&&state.latest[a]>=0&&state.latest[a]<=255)&&Number.isFinite(state.ageMs)&&state.ageMs+Math.max(0,performance.now()-lastMessageAt)<=300&&performance.now()-lastMessageAt<=1000);}
+    function clearTrails(){for(const side of ['left','right']){trails[side]=[];attr($(side+'-trail'),'points','');}}
+    function neutralize(){clearTrails();for(const side of ['left','right']){attr($(side+'-dot'),'visibility','hidden');text(side+'-values','X —   Y —');text(side+'-detail','No fresh input');}for(const key of ['l2','r2']){$(key+'-fill').style.width='0%';attr($(key+'-meter'),'aria-valuenow',0);text(key+'-value','—');}text('button-count','—');$('button-badge').dataset.active='false';wasLive=false;}
+    function displayPreferences(){
+      $('trail-mode').value=preferences.trails;$('view-mode').value=preferences.view;$('number-units').value=preferences.units;$('center-rings').checked=preferences.rings;$('show-rates').checked=preferences.rates;
+      $('plots').dataset.view=preferences.view;$('left-plot').hidden=preferences.view==='right';$('right-plot').hidden=preferences.view==='left';$('rates').hidden=!preferences.rates;
+      for(const side of ['left','right'])attr($(side+'-center-ring'),'visibility',preferences.rings?'visible':'hidden');
+      clearTrails();lastNumbersAt=-Infinity;
+    }
+    function savePreference(key,value){preferences[key]=value;try{localStorage.setItem(preferenceKey,JSON.stringify(preferences));}catch{}displayPreferences();}
+    function inputActivity(){
+      for(const key of ['l2','r2']){const value=clamp(Number(state.latest[key])||0,0,255),percentage=Math.round(value/255*100),width=percentage+'%';if($(key+'-fill').style.width!==width)$(key+'-fill').style.width=width;attr($(key+'-meter'),'aria-valuenow',Math.round(value));text(key+'-value',percentage+'%');}
+      const mask=(Number(state.latest.buttons)||0)&0x7fff;let count=0;for(let bits=mask;bits;bits&=bits-1)count++;
+      text('button-count',count+' held');const active=String(count>0);if($('button-badge').dataset.active!==active)$('button-badge').dataset.active=active;
+    }
+    function draw(now=performance.now()){
+      if(!fresh()){if(wasLive)neutralize();return;}
+      wasLive=true;
+      const numbersDue=now-lastNumbersAt>=100;
+      for(const [side,x,y] of [['left','lx','ly'],['right','rx','ry']]){
+        if(preferences.view!=='both'&&preferences.view!==side)continue;
+        const nx=norm(state.latest[x]),ny=norm(state.latest[y]);
+        const scaledRadius=Math.hypot(nx,ny)*zoom,projection=scaledRadius>1?1/scaledRadius:1;
+        // Keep the complete marker inside the plot, including diagonal and zoomed input.
+        const px=80+nx*zoom*projection*47,py=59+ny*zoom*projection*47;
+        const dot=$(side+'-dot');attr(dot,'cx',px.toFixed(2));attr(dot,'cy',py.toFixed(2));attr(dot,'visibility','visible');
+        const point=px.toFixed(2)+','+py.toFixed(2);
+        const trailLimit=preferences.trails==='off'?0:preferences.trails==='short'?40:200;
+        if(trailLimit&&trails[side].at(-1)!==point){trails[side].push(point);if(trails[side].length>trailLimit)trails[side].splice(0,trails[side].length-trailLimit);attr($(side+'-trail'),'points',trails[side].join(' '));}
+        if(numbersDue)text(side+'-values',preferences.units==='raw'?`X ${state.latest[x]}   Y ${state.latest[y]}`:`X ${fmt(nx)}   Y ${fmt(ny)}`);
+        const d=state.details?.[side];
+        if(scaledRadius>1)text(side+'-detail',zoom===10?'Outside 10× window':'Beyond 100% radius');
+        else if(d&&Number.isFinite(d.turns))text(side+'-detail',`${d.turns.toFixed(1)} turns · ${d.coveredSectors??0}/16 sectors`);
+        else if(d&&Number.isFinite(d.releases))text(side+'-detail',`${d.releases} releases recorded`);
+        else text(side+'-detail',zoom===10?'10× center · rim = 10% input':'Live position');
+      }
+      if(numbersDue){inputActivity();lastNumbersAt=now;}
+    }
+    function announce(value){if(value&&value!==lastAnnounced){text('announcement',value);lastAnnounced=value;}}
+    function controls(){
+      const running=state?.status==='running',paused=state?.status==='paused';
+      const key=[pending,fresh(),running,paused,Boolean(state?.connected)].join();if(key===lastControlKey)return;lastControlKey=key;
+      $('start').disabled=pending||!fresh()||running||paused;
+      $('pause').disabled=pending||(!running&&!paused);text('pause',paused?'Resume':'Pause');
+      $('stop').disabled=pending||(!running&&!paused);
+      $('connect').disabled=pending;text('connect',state?.connected?'Disconnect':'Connect controller');
+      $('lightbar-apply').disabled=pending||!fresh();
+      $('trigger-apply').disabled=pending||!fresh()||running;$('trigger-reset').disabled=pending||!fresh()||running;triggerSelection();
+    }
+    function connection(){
+      const live=fresh();if($('connection').dataset.live!==String(live))$('connection').dataset.live=String(live);
+      if(live)text('connection',`Live · ${state.latest.mode==='usb'?'USB':state.latest.mode||'controller'}${lastSource==='poll'?' · polling':''}`);
+      else if(state?.connected)text('connection','Input paused · waiting for fresh reports');
+      else text('connection',state?'Controller disconnected':'Connecting to local coach…');
+    }
+    function accept(next,transport){
+      if(stopped||!next||typeof next!=='object')return;
+      const now=performance.now();
+      receiveCount++;
+      const session=next.sessionId||'';
+      if(session!==lastSession){clearTrails();lastSession=session;}
+      state=next;lastMessageAt=now;lastSource=transport;if(transport==='sse')lastSseAt=now;
+      const instruction=typeof next.instruction==='string'&&next.instruction?next.instruction:next.status==='complete'?'Guided check finished':next.status==='paused'?'Paused — resume when you are ready':next.connected?'Ready for a guided check':'Connect your controller to begin';
+      if(instruction!==lastInstruction){text('instruction',instruction);lastInstruction=instruction;lastWarning='';stickyUntil=0;announce(instruction);}
+      const warning=typeof next.warning==='string'?next.warning:'';
+      if(warning){lastWarning=warning;stickyUntil=now+2500;announce(warning);}
+      const sticky=lastWarning&&now<stickyUntil;
+      $('feedback').dataset.warning=String(Boolean(sticky));
+      if(sticky)text('feedback',lastWarning);
+      else if(next.status==='complete')text('feedback',next.result?.complete===false?'Some captures need another pass. No calibration was changed.':'Results recorded. No controller calibration or game settings changed.');
+      else if(next.status==='error')text('feedback',next.error||next.message||'The coach needs attention. Reconnect and try again.');
+      else if(next.status==='paused')text('feedback','Live positions stay visible. Resume restarts the interrupted phase.');
+      else text('feedback',next.status==='running'?'Follow the prompt. Each step advances when the movement checks pass.':'Start once, then follow the prompts. The coach checks each movement before continuing.');
+      const progress=clamp(Number(next.progress)||0,0,1),width=(progress*100).toFixed(1)+'%';if($('progress-fill').style.width!==width)$('progress-fill').style.width=width;attr($('progress'),'aria-valuenow',Math.round(progress*100));
+      text('timer',Number.isFinite(next.secondsRemaining)?Math.max(0,Math.ceil(next.secondsRemaining))+'s':next.status==='running'?Math.round(progress*100)+'%':'—');
+      for(const id of stepNames){const step=next.steps?.find(s=>s.id===id);const status=step?.status||'pending';const node=$('step-'+id);if(node.dataset.status!==status)node.dataset.status=status;const paused=status==='current'&&next.status==='paused';if(node.dataset.paused!==String(paused))node.dataset.paused=String(paused);attr(node,'aria-current',status==='current'?'step':'false');attr(node,'aria-label',`${step?.label||id}: ${paused?'paused':status}`);}
+      controllerInfo();connection();controls();
+    }
+    async function poll(){
+      if(stopped||polling||(lastSseAt>0&&performance.now()-lastSseAt<250))return;
+      polling=true;
+      try{const r=await fetch(url('/state'),{cache:'no-store',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(1800)});if(!r.ok)throw Error('Local coach returned '+r.status);accept(await r.json(),'poll');}
+      catch(e){if(performance.now()-lastMessageAt>1000){neutralize();text('connection','Local coach unavailable · reconnecting');controls();}}
+      finally{polling=false;}
+    }
+    function stream(){
+      try{
+        source=new EventSource(url('/events'));
+        source.addEventListener('state',event=>{try{accept(JSON.parse(event.data),'sse');}catch(e){text('connection','Invalid live update · retrying');}});
+        source.onerror=()=>{lastSseAt=0;poll();};
+      }catch(e){source=null;}
+      poll();pollTimer=setInterval(poll,33);
+    }
+    async function command(action,payload={}){
+      if(stopped||pending)return false;pending=true;controls();
+      try{
+        const r=await fetch(url('/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action}),referrerPolicy:'no-referrer',signal:AbortSignal.timeout(8000)});
+        const data=await r.json();if(!r.ok||data.error)throw Error(data.error||'Could not '+action);
+        if(data.state)accept(data.state,'poll');else if(Object.hasOwn(data,'connected'))accept(data,'poll');
+        lastSseAt=0;await poll();return true;
+      }catch(e){lastWarning=e.message;stickyUntil=performance.now()+5000;text('feedback',e.message);$('feedback').dataset.warning='true';if(action==='lightbar'||action==='triggers'){const id=action==='lightbar'?'lightbar-status':'trigger-status';text(id,e.message);$(id).dataset.error='true';}announce(e.message);return false;}
+      finally{pending=false;controls();}
+    }
+    $('start').addEventListener('click',()=>command('start'));
+    $('pause').addEventListener('click',()=>command(state?.status==='paused'?'resume':'pause'));
+    $('stop').addEventListener('click',()=>command('stop'));
+    $('connect').addEventListener('click',()=>command(state?.connected?'disconnect':'connect'));
+    $('zoom').addEventListener('click',()=>{zoom=zoom===1?10:1;clearTrails();lastNumbersAt=-Infinity;text('zoom',zoom+'× view');attr($('zoom'),'aria-pressed',zoom===10);});
+    $('trail-mode').addEventListener('change',event=>savePreference('trails',event.target.value));
+    $('view-mode').addEventListener('change',event=>savePreference('view',event.target.value));
+    $('number-units').addEventListener('change',event=>savePreference('units',event.target.value));
+    $('center-rings').addEventListener('change',event=>savePreference('rings',event.target.checked));
+    $('show-rates').addEventListener('change',event=>savePreference('rates',event.target.checked));
+    $('clear-trail').addEventListener('click',clearTrails);
+    for(const [name,color]of Object.entries(lightbarPresets))$('lightbar-'+name).addEventListener('click',()=>{$('lightbar-color').value=color;lightbarSelection();});
+    for(const id of ['lightbar-color','lightbar-brightness']){const update=()=>lightbarSelection();$(id).addEventListener('input',update);$(id).addEventListener('change',update);}
+    $('lightbar-color').value='#8057ff';$('lightbar-brightness').value='100';
+    $('lightbar-apply').addEventListener('click',async()=>{
+      if(stopped||pending||!fresh())return;
+      const color=$('lightbar-color').value,brightness=Number($('lightbar-brightness').value);
+      if(!/^#[0-9a-f]{6}$/i.test(color)){text('lightbar-status','Choose a valid color.');$('lightbar-status').dataset.error='true';return;}
+      if(!Number.isFinite(brightness)||brightness<0||brightness>100){text('lightbar-status','Choose brightness from 0 to 100%.');$('lightbar-status').dataset.error='true';return;}
+      const values=[1,3,5].map(i=>Math.round(parseInt(color.slice(i,i+2),16)*brightness/100));
+      lightbarPending=true;text('lightbar-status','Sending…');$('lightbar-status').dataset.error='false';
+      const sent=await command('lightbar',{r:values[0],g:values[1],b:values[2]});lightbarPending=false;
+      if(sent){text('lightbar-status','Sent · temporary');$('lightbar-status').dataset.error='false';lastEffectAt=state?.effects?.lightbar?.sentAt||lastEffectAt;}
+    });
+    for(const id of ['trigger-preset','trigger-target','trigger-position','trigger-strength']){const update=()=>triggerSelection();$(id).addEventListener('input',update);$(id).addEventListener('change',update);}
+    $('trigger-preset').value='off';$('trigger-target').value='both';$('trigger-position').value='2';$('trigger-strength').value='6';
+    async function applyTriggers(reset=false){
+      if(stopped||pending||!fresh()||state?.status==='running')return;
+      const preset=reset?'off':$('trigger-preset').value,target=reset?'both':$('trigger-target').value;
+      const position=Number($('trigger-position').value),strength=Number($('trigger-strength').value);
+      if(!['off','light','firm','max','weapon','custom'].includes(preset)||!['both','left','right'].includes(target)){text('trigger-status','Choose a valid effect and target.');$('trigger-status').dataset.error='true';return;}
+      if(preset==='custom'&&(!Number.isInteger(position)||position<0||position>9||!Number.isInteger(strength)||strength<1||strength>8)){text('trigger-status','Use position 0–9 and strength 1–8.');$('trigger-status').dataset.error='true';return;}
+      const payload={preset,target};if(preset==='custom')Object.assign(payload,{position,strength});
+      triggerPending=true;text('trigger-status','Sending…');$('trigger-status').dataset.error='false';
+      const sent=await command('triggers',payload);triggerPending=false;
+      if(sent){text('trigger-status','Sent · temporary');$('trigger-status').dataset.error='false';lastTriggerAt=state?.effects?.triggers?.sentAt||lastTriggerAt;if(reset){$('trigger-preset').value='off';$('trigger-target').value='both';triggerSelection();}}
+    }
+    $('trigger-apply').addEventListener('click',()=>applyTriggers());$('trigger-reset').addEventListener('click',()=>applyTriggers(true));
+    function frame(now){
+      if(stopped)return;
+      if(fresh()){frameCount++;draw(now);}
+      else{if(wasLive)neutralize();connection();controls();if(state?.connected){text('feedback','Input paused. Waiting for fresh controller readings.');$('feedback').dataset.warning='false';}}
+      const elapsed=now-rateSince;if(elapsed>=1000){fps=Math.round(frameCount*1000/elapsed);receiveHz=Math.round(receiveCount*1000/elapsed);text('rates',`${fps} render FPS · ${receiveHz} Hz feed`);frameCount=0;receiveCount=0;rateSince=now;}
+      rafId=requestAnimationFrame(frame);
+    }
+    async function reportMetrics(){if(stopped||!fresh())return;try{await fetch(url('/metrics'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fps,receiveHz,clientAgeMs:Math.max(0,performance.now()-lastMessageAt)}),referrerPolicy:'no-referrer',signal:AbortSignal.timeout(1800)});}catch{}}
+    window.addEventListener('pagehide',()=>{stopped=true;source?.close();clearInterval(pollTimer);clearInterval(metricsTimer);if(rafId!==null)cancelAnimationFrame(rafId);});
+    function boot(){if(!stopped&&rafId!==null)return;stopped=false;lastMessageAt=0;lastSseAt=0;polling=false;frameCount=0;receiveCount=0;rateSince=performance.now();neutralize();stream();rafId=requestAnimationFrame(frame);metricsTimer=setInterval(reportMetrics,5000);}
+    window.addEventListener('pageshow',event=>{if(event.persisted)boot();});
+    displayPreferences();boot();controllerInfo();controls();lightbarSelection();triggerSelection();
+  </script>
+</body>
+</html>

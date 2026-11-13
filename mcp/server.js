@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { withController } from './hid/controller-session.js';
 import { SessionStore, PHASES, DEFAULT_SECONDS, resolveSessionController } from './guided.js';
 import { runGuided } from './coach-runner.js';
+import { coachCardPath, ensureCoach } from './coach-service.js';
 import {
   listControllers, Controller, diagnoseFromFrames,
   TRIGGER_PRESETS, effFeedback, effWeapon, effOff,
@@ -27,6 +28,18 @@ const sessions = new SessionStore();
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] });
 const PATH = { path: z.string().optional().describe('Specific controller path from list_controllers; omit to use the first found') };
 
+server.registerTool('show_live_coach',{
+  description:'Prepare the interactive live stick card for T3 chat. Returns an absolute HTML path; render with html_preview then html_render. Preview and desktop network policies may differ; verify on the target client. Card offers live axes, adaptive text-only prompts and Start/Pause. No separate browser dashboard, voice, or calibration writes.',inputSchema:{},
+},async()=>ok(await coachCardPath()));
+server.registerTool('live_coach_state',{description:'Current live axes, coaching stage, corrections, and session status from the embedded card.',inputSchema:{}},async()=>{
+  const info=await ensureCoach();const r=await fetch(`${info.apiBase}/state?token=${info.token}`);return ok(await r.json());
+});
+server.registerTool('live_coach_control',{
+  description:'Control adaptive guided checks, connect/disconnect the live view, and explicitly send temporary lightbar or adaptive-trigger effects. Start measurement once; later phases advance from evidence. Trigger effects require a paused/idle check and compatible motors. No calibration or flash command.',
+  inputSchema:{action:z.enum(['connect','disconnect','start','pause','resume','stop','lightbar','triggers']),r:z.number().int().min(0).max(255).optional(),g:z.number().int().min(0).max(255).optional(),b:z.number().int().min(0).max(255).optional(),preset:z.enum(['off','light','firm','max','weapon','custom']).optional(),target:z.enum(['both','left','right']).optional(),position:z.number().int().min(0).max(9).optional(),strength:z.number().int().min(1).max(8).optional()},
+},async(input)=>{
+  const info=await ensureCoach();const r=await fetch(`${info.apiBase}/control?token=${info.token}`,{method:'POST',body:JSON.stringify(input)});const result=await r.json();if(!r.ok)throw Error(result.error);return ok(result);
+});
 let controllerBusy=false;
 server.registerTool('run_guided_session',{
   description:'Read input continuously and coach movement criteria. Emits logging/progress notifications; client delivery latency varies. No controller calibration writes.',

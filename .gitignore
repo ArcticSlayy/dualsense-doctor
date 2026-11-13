@@ -28,3 +28,6 @@ npm-debug.log*
 
 # Private measurement evidence
 /sessions/
+
+# Private live-card runtime and capabilities
+/.runtime/
