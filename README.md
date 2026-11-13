@@ -12,7 +12,7 @@ A local toolkit for measuring DualSense stick input, reviewing calibration, and 
 
 - **Browser apps:** inspect live sticks, run drift and range diagnostics, and adjust adaptive triggers or the light bar with WebHID.
 - **CLI tools:** sample and monitor sticks with `dsdoctor.py`, or apply temporary trigger effects with `triggers.py`.
-- **MCP coaching:** capture guided, logged measurements; read saved reports; and compare up to ten compatible rounds. The optional card supports 1, 3, or 5-round targets. Game deadzone values are unapplied recommendations.
+- **MCP coaching:** capture guided, logged measurements; read saved reports; and compare up to ten compatible rounds. Start with one complete guided check. Optional three/five-check totals measure consistency, one manually started repeat at a time. Game deadzone suggestions include a margin; they are unapplied starting points, not required minimums.
 - **Directional tuning evidence:** inspect signed resting X/Y means, quiet variation, and four-direction axis reach. Fixed next-check guidance helps separate missing evidence from a repeatable offset, without automatically changing calibration. [How to interpret it](mcp/DIAGNOSTICS.md#directional-stick-assessment).
 - **Optional T3 live card:** navigate Check, Results and Controller views, follow prominent stop/hands-off cues and a countdown, read a plain-language result and next step, compare before/after metrics, export a privacy-filtered PNG, and explicitly apply temporary effects. Browse saved checks with measured range plots and run a separate analog-trigger input check. Frame-gap diagnostics distinguish view cadence from feed rate.
 

@@ -110,3 +110,15 @@ server instruction; no Continue click is needed. Optional: compare repeated chec
 contains series goals and reset. A rejected latest check must not hide recovery or
 turn earlier accepted evidence into a current result. An unavailable recommendation
 calls for reviewing evidence, not prescribing a missing value.
+
+
+Lead with one full check, its result, then validation in game. Three/five are optional
+total check counts, not automatic recordings or repeated calibration writes. Changing
+the target starts nothing; Repeat one check starts one entire guided sequence. Do not
+instruct the owner to save a report or create a profile before using the controller:
+completed reports are stored locally, a PNG is a separate image, controller Save is
+explicit, and game settings belong in the game. The conservative deadzone suggestion
+includes a margin; it is not a minimum. Keep a lower stable setting. Zero should be
+validated in play, never treated as proof of better hardware calibration. The choice
+of game affects settings interpretation, not the identity or validity of controller
+calibration. Optional controls must not obscure an active trial or uncertain save.

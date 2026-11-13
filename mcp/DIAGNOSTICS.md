@@ -108,3 +108,28 @@ stays reachable even if the latest check is rejected or the ten-round limit is m
 Earlier accepted values remain labeled as earlier evidence. If no reliable deadzone
 candidate exists in the supported range, the next step is evidence review, not an
 instruction to use an unavailable value. Navigation sends no controller commands.
+
+
+## One check, then in-game validation
+
+One full check runs rest, clockwise range, counterclockwise range, release, buttons
+and final verification once. It records input rather than changing calibration.
+The default target is one check. Optional targets of three or five refer to the
+whole comparison total, including accepted checks already recorded. Choosing a
+target does not start, reset or discard a check; Repeat one check starts exactly
+one additional measurement. Repeats assess consistency, not progressive auto-tuning.
+
+The game deadzone suggestion is conservative: largest accepted clean quiet peak
+plus one percentage point, rounded up. It is not a required minimum, drift grade
+or controller setting. Keep a smaller game deadzone if it is stable; otherwise try
+the suggestion and lower it gradually while checking for unwanted movement after
+release. Zero is an option to validate in play, not a hardware calibration target.
+Game scales and named presets do not have a universal numerical mapping.
+
+Completed check reports are stored locally. Download result image exports a picture.
+Neither operation saves calibration. Game options are set in the game; this card
+does not create or apply game profiles. A temporary controller adjustment remains
+a separate decision followed by retest and explicit Save calibration to controller.
+Optional calibration starts collapsed after an ordinary measurement. Active or
+uncertain calibration exposes its existing review/recovery controls automatically;
+confirmation remains globally visible. See COACH-CARD-DESIGN.md for visual rules.
