@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCoachServer, CoachHost, batteryFromReport } from '../coach-host.js';
+
+test('preparation, phase progress and current corrections remain distinct in snapshots',()=>{
+  const host=new CoachHost({});host.status='running';
+  host.event({type:'instruction',phase:'range',direction:'clockwise',countdownSeconds:3,message:'Clockwise'});
+  let s=host.snapshot();assert.equal(s.preparing,true);assert.equal(s.direction,'clockwise');assert.ok(s.prepareSecondsRemaining>2);assert.equal(s.phaseProgress,0);
+  host.event({type:'phase_start'});
+  host.event({type:'progress',phaseProgress:.4,warning:'Left: slow down',details:{left:{cueCode:'too_fast'}}});
+  s=host.snapshot();assert.equal(s.preparing,false);assert.equal(s.warning,'Left: slow down');assert.equal(s.phaseProgress,.4);
+  host.event({type:'progress',phaseProgress:.5,warning:null,details:{left:{cueCode:'keep_going'}}});assert.equal(host.snapshot().warning,null);
+  host.event({type:'phase_complete'});assert.equal(host.snapshot().phaseProgress,1);
+  host.event({type:'instruction',phase:'range',direction:'counterclockwise',countdownSeconds:3});
+  s=host.snapshot();assert.equal(s.phaseProgress,0);assert.deepEqual(s.details,{});assert.equal(s.direction,'counterclockwise');
+  host.status='idle';s=host.snapshot();assert.equal(s.preparing,false);assert.equal(s.phase,null);assert.equal(s.secondsRemaining,null);assert.deepEqual(s.details,{});
+});
 test('battery reporting uses Sony status and does not invent a level for unknown reports',()=>{
   const usb=Array(64).fill(0);usb[53]=0x29;
   assert.equal(batteryFromReport(usb,'usb').level,100);

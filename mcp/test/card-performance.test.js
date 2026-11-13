@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const html=readFileSync(new URL('../coach-card.html',import.meta.url),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replaceAll('__API_BASE__','http://127.0.0.1:27892').replaceAll('__TOKEN__','test-token');
-function setup({storedPreferences,blockedStorage=false,controlResponse}={}){
+function setup({storedPreferences,blockedStorage=false,controlResponse,deferUi=false,reducedMotion=false}={}){
   let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],nodes=new Map(),storage=new Map();
   if(storedPreferences)storage.set('dualsense-coach-display',JSON.stringify(storedPreferences));
   for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{textContent:'',attributes:{},writes:[],style:{},dataset:{},disabled:false,hidden:false,value:'',checked:false,listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
@@ -15,10 +15,10 @@ function setup({storedPreferences,blockedStorage=false,controlResponse}={}){
     setInterval:(fn,ms)=>{const id=nextId++;intervals.set(id,{fn,ms});return id;},clearInterval:id=>intervals.delete(id),
     EventSource,fetch:(url,options)=>{requests.push({url:String(url),options});if(String(url).includes('/control')&&controlResponse)return Promise.resolve({ok:controlResponse.ok!==false,json:async()=>controlResponse.body??{connected:true,status:'idle'}});return new Promise(()=>{});},
     localStorage:{getItem(key){if(blockedStorage)throw Error('storage blocked');return storage.get(key)??null;},setItem(key,value){if(blockedStorage)throw Error('storage blocked');storage.set(key,String(value));}},
-    window:{addEventListener:(name,fn)=>listeners.set(name,fn),matchMedia:()=>({matches:false})},console});
+    window:{addEventListener:(name,fn)=>listeners.set(name,fn),matchMedia:()=>({matches:reducedMotion})},console});
   vm.runInContext(script,context);
   const input=(lx=128)=>({connected:true,status:'idle',latest:{lx,ly:128,rx:128,ry:128,mode:'usb'},ageMs:0,instruction:'Move the sticks',progress:0,details:{}});
-  return {context,nodes,frames,intervals,listeners,requests,input,storage,change(id,value){const node=nodes.get(id);assert.ok(node,id);if(typeof value==='boolean')node.checked=value;else node.value=value;node.listeners.get('change')?.({target:node});},click(id){nodes.get(id).listeners.get('click')?.();},accept(s){context.input=s;vm.runInContext("accept(input,'sse')",context);},step(ms=16){now+=ms;const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(now);},at(value){now=value;}};
+  return {context,nodes,frames,intervals,listeners,requests,input,storage,change(id,value){const node=nodes.get(id);assert.ok(node,id);if(typeof value==='boolean')node.checked=value;else node.value=value;node.listeners.get('change')?.({target:node});},click(id){nodes.get(id).listeners.get('click')?.();},accept(s){context.input=s;vm.runInContext("accept(input,'sse')",context);if(!deferUi)vm.runInContext("renderState()",context);},step(ms=16){now+=ms;const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(now);},at(value){now=value;}};
 }
 
 test('multiple feed updates coalesce into one animation-frame plot update',()=>{
@@ -177,4 +177,63 @@ test('trigger success and errors describe a send rather than physical calibratio
  const run=setup({controlResponse:{body:{connected:true,status:'idle',effects:{triggers:{preset:'firm',target:'both',sentAt:'synthetic',commandSent:true,deviceConfirmed:false}}}}});run.accept(run.input());run.change('trigger-preset','firm');run.click('trigger-apply');
  await new Promise(r=>setImmediate(r));assert.equal(run.nodes.get('trigger-status').textContent,'Sent · temporary');
  const failed=setup({controlResponse:{ok:false,body:{error:'Synthetic trigger failure'}}});failed.accept(failed.input());failed.click('trigger-reset');await new Promise(r=>setImmediate(r));assert.match(failed.nodes.get('trigger-status').textContent,/Synthetic trigger failure/);
+});
+
+
+test('feed bursts defer guidance and metadata DOM writes to one frame',()=>{
+ const run=setup({deferUi:true});
+ for(let i=0;i<8;i++){const s=run.input(128+i);s.instruction='Instruction '+i;run.accept(s);}
+ assert.equal(run.nodes.get('instruction').textContent,'');run.step();
+ assert.equal(run.nodes.get('instruction').textContent,'Instruction 7');
+ assert.equal(run.frames.size,1);
+});
+
+test('preparation countdown drains smoothly but never starts a phase without server evidence',()=>{
+ const run=setup(),s=run.input();Object.assign(s,{status:'running',phase:'range',direction:'clockwise',preparing:true,prepareSecondsRemaining:3,prepareDurationSeconds:3});run.accept(s);
+ assert.equal(run.nodes.get('timer').textContent,'3');assert.equal(run.nodes.get('timer-label').textContent,'Get ready');
+ const before=run.nodes.get('timer-ring').attributes['stroke-dashoffset'];run.step(100);assert.notEqual(run.nodes.get('timer-ring').attributes['stroke-dashoffset'],before);
+ for(let i=0;i<4;i++){s.prepareSecondsRemaining=0;run.accept(s);run.step(20);}
+ assert.equal(run.nodes.get('timer').textContent,'…');assert.equal(run.nodes.get('timer-label').textContent,'Waiting');
+ assert.equal(run.nodes.get('movement-label').textContent,'Next: Full outer edge · clockwise');
+ s.preparing=false;s.phaseProgress=.25;s.secondsRemaining=null;run.accept(s);assert.equal(run.nodes.get('timer').textContent,'25%');
+ run.step(301);assert.equal(run.nodes.get('timer-label').textContent,'Input paused');assert.equal(run.nodes.get('timer').textContent,'—');
+});
+
+test('range cues and coverage reflect each stick, direction and preparation state',()=>{
+ const run=setup(),s=run.input();Object.assign(s,{status:'running',phase:'range',direction:'counterclockwise',details:{left:{cueCode:'too_fast',cueTone:'warning',cueMessage:'Slow down: keep a steady circle.',coveredSectors:8},right:{cueCode:'keep_going',cueTone:'good',cueMessage:'Good pace. Keep going.',coveredSectors:12}}});run.accept(s);
+ assert.equal(run.nodes.get('movement-guide').hidden,false);assert.equal(run.nodes.get('movement-guide').dataset.direction,'counterclockwise');
+ assert.match(run.nodes.get('left-cue').textContent,/Slow down/);assert.equal(run.nodes.get('left-cue').dataset.tone,'warning');assert.equal(run.nodes.get('right-cue').dataset.tone,'good');
+ assert.equal(run.nodes.get('left-coverage-fill').style.width,'50%');assert.equal(run.nodes.get('right-coverage-fill').style.width,'75%');
+ s.preparing=true;run.accept(s);assert.equal(run.nodes.get('left-cue').hidden,true);assert.equal(run.nodes.get('left-coverage').hidden,true);
+ s.status='paused';run.accept(s);assert.equal(run.nodes.get('movement-guide').hidden,true);
+});
+
+test('custom hex color syncs preview and picker without sending until Apply',()=>{
+ const run=setup();run.accept(run.input());run.change('lightbar-hex','12ABEF');
+ assert.equal(run.nodes.get('lightbar-color').value,'#12abef');assert.equal(run.nodes.get('lightbar-hex').value,'#12ABEF');
+ assert.equal(run.nodes.get('lightbar-preview').style.backgroundColor,'rgb(18,171,239)');assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+ run.click('lightbar-apply');const request=run.requests.find(r=>r.url.includes('/control'));assert.deepEqual(JSON.parse(request.options.body),{r:18,g:171,b:239,action:'lightbar'});
+});
+
+test('invalid custom hex never sends the previous valid color',()=>{
+ const run=setup();run.accept(run.input());run.change('lightbar-hex','wrong');run.click('lightbar-apply');
+ assert.equal(run.nodes.get('lightbar-hex').attributes['aria-invalid'],'true');assert.ok(!run.requests.some(r=>r.url.includes('/control')));
+});
+
+test('reduced motion countdown uses discrete ring steps',()=>{
+ const run=setup({reducedMotion:true}),s=run.input();Object.assign(s,{status:'running',preparing:true,prepareSecondsRemaining:3,prepareDurationSeconds:3});run.accept(s);
+ const before=run.nodes.get('timer-ring').attributes['stroke-dashoffset'];run.step(100);assert.equal(run.nodes.get('timer-ring').attributes['stroke-dashoffset'],before);
+});
+
+
+test('all customization options share one disclosure with named groups',()=>{
+ assert.equal([...html.matchAll(/<details\b/g)].length,1);
+ const panel=html.match(/<details\b[^>]*id="controller-controls"[\s\S]*?<\/details>/)[0];
+ for(const id of ['trail-mode','view-mode','number-units','center-rings','show-rates','clear-trail','lightbar-hex','lightbar-apply','trigger-preset','trigger-apply'])assert.ok(panel.includes('id="'+id+'"'),id);
+ assert.match(panel,/Live view/);assert.match(panel,/Lightbar/);assert.match(panel,/Adaptive triggers/);
+});
+
+test('resolved server corrections clear when good movement is reported',()=>{
+ const run=setup(),s=run.input();s.status='running';s.warning='Slow down.';run.accept(s);assert.equal(run.nodes.get('feedback').dataset.warning,'true');
+ s.warning=null;run.accept(s);assert.equal(run.nodes.get('feedback').dataset.warning,'false');assert.doesNotMatch(run.nodes.get('feedback').textContent,/Slow down/);
 });

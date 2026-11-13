@@ -15,9 +15,14 @@ The card shows current axes, trigger/button input, estimated battery state,
 available firmware information, bounded trails, adaptive text instructions, a step
 checklist, and Start/Pause/Resume/Stop. Display preferences and zoom affect only
 the visualization; raw values and measurements retain their original meaning.
-The local relay aims to publish near 60 Hz, while actual render/feed rates depend
+The local relay targets 125 Hz, while actual render/feed rates depend
 on the machine and client. It reports measured rates rather than promising a
 fixed FPS. Stale input is hidden and cannot be presented as live data.
+The card coalesces incoming changes on animation frames. Direction arrows, rim
+coverage and separate per-stick cues explain the current movement. A preparation
+ring counts down to the measurement; phase progress remains evidence-based.
+Lightbar colors can be chosen with a picker or hex input and previewed locally
+before Apply. The preview is not a prediction of the physical LED's appearance.
 
 ## Local service and privacy
 

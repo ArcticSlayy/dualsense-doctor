@@ -20,13 +20,13 @@ export class CoachHost {
     this.effects={lightbar:null,triggers:null};this.battery=null;this.firmware=null;
   }
   event(e) {
-    if(e.type==='instruction') {this.currentIndex=RUN_STEPS.findIndex(s=>s.phase===e.phase&&s.direction===e.direction);this.warning=null;this.details={};this.prepareUntil=performance.now()+(e.countdownSeconds||0)*1000;this.secondsRemaining=null;}
+    if(e.type==='instruction') {this.currentIndex=RUN_STEPS.findIndex(s=>s.phase===e.phase&&s.direction===e.direction);this.warning=null;this.details={};this.prepareDurationSeconds=e.countdownSeconds||0;this.prepareUntil=performance.now()+this.prepareDurationSeconds*1000;this.secondsRemaining=null;this.phaseProgress=0;this.progress=this.currentIndex/RUN_STEPS.length;}
     if(e.type==='phase_start')this.prepareUntil=0;
-    if(e.type==='phase_complete')this.completedSteps.add(this.currentIndex);
+    if(e.type==='phase_complete'){this.completedSteps.add(this.currentIndex);this.phaseProgress=1;this.progress=(this.currentIndex+1)/RUN_STEPS.length;}
     this.sessionId=e.sessionId||this.sessionId;
     if(e.message)this.instruction=e.message;
     if(e.type==='correction')this.warning=e.message;
-    if(e.type==='progress'){this.warning=null;this.progress=(this.currentIndex+(e.phaseProgress||0))/RUN_STEPS.length;this.secondsRemaining=e.secondsRemaining;this.details=e.details;}
+    if(e.type==='progress'){this.warning=e.warning||null;this.phaseProgress=e.phaseProgress||0;this.progress=(this.currentIndex+this.phaseProgress)/RUN_STEPS.length;this.secondsRemaining=e.secondsRemaining;this.details=e.details;}
     if(e.type!=='progress'){this.events.push({at:e.at||new Date().toISOString(),message:e.message});this.events=this.events.slice(-30);}
   }
   connect() {
@@ -90,9 +90,13 @@ export class CoachHost {
   }
   snapshot() {
     const ageMs=this.lastAt?performance.now()-this.lastAt:null;
+    const active=['running','paused'].includes(this.status),step=active?RUN_STEPS[this.currentIndex]:null;
+    const preparing=this.status==='running'&&this.prepareUntil>performance.now();
+    const prepareSecondsRemaining=preparing?Math.max(0,(this.prepareUntil-performance.now())/1000):0;
     const labels=['Rest','Clockwise','Counterclockwise','Release','Buttons','Verify'];
-    return {connected:!!this.c,status:this.status,latest:ageMs!==null&&ageMs<300?this.latest:null,ageMs,sequence:this.sequence,inputHz:this.inputHz,publishHz:60,clientMetrics:this.clientMetrics||null,battery:this.battery,firmware:this.firmware,effects:this.effects,controller:this.c?{product:this.c.info.product,productId:this.c.info.productId}:null,
-      instruction:this.instruction,warning:this.warning,progress:this.progress,secondsRemaining:this.prepareUntil>performance.now()?Math.ceil((this.prepareUntil-performance.now())/1000):this.secondsRemaining??null,details:this.details||{},sessionId:this.sessionId||null,result:this.result?{complete:this.result.complete,logPath:this.result.report?.logPath,reason:this.result.reason}:null,events:this.events,
+    return {connected:!!this.c,status:this.status,latest:ageMs!==null&&ageMs<300?this.latest:null,ageMs,sequence:this.sequence,inputHz:this.inputHz,publishHz:125,clientMetrics:this.clientMetrics||null,battery:this.battery,firmware:this.firmware,effects:this.effects,controller:this.c?{product:this.c.info.product,productId:this.c.info.productId}:null,
+      phase:step?.phase||null,direction:step?.direction||null,phaseProgress:this.phaseProgress||0,preparing,prepareSecondsRemaining,prepareDurationSeconds:this.prepareDurationSeconds||0,
+      instruction:this.instruction,warning:this.warning,progress:this.progress,secondsRemaining:active?(preparing?Math.ceil(prepareSecondsRemaining):this.secondsRemaining??null):null,details:active?(this.details||{}):{},sessionId:this.sessionId||null,result:this.result?{complete:this.result.complete,logPath:this.result.report?.logPath,reason:this.result.reason}:null,events:this.events,
       stepIndex:this.currentIndex,steps:RUN_STEPS.map((s,i)=>({id:s.direction?`range-${s.direction}`:s.phase,label:labels[i],status:this.completedSteps.has(i)?'complete':i===this.currentIndex&&['running','paused'].includes(this.status)?'current':'pending'}))};
   }
 }
@@ -131,7 +135,7 @@ export function createCoachServer({host=new CoachHost(),port=27892,token=randomB
     }
     res.writeHead(404);res.end(JSON.stringify({error:'Not found'}));
   });
-  const timer=setInterval(()=>{if(!clients.size)return;const data=`event: state\ndata: ${JSON.stringify(host.snapshot())}\n\n`;for(const res of clients){if(res.writableLength>65536){clients.delete(res);res.end();}else res.write(data);}},16);
+  const timer=setInterval(()=>{if(!clients.size)return;const data=`event: state\ndata: ${JSON.stringify(host.snapshot())}\n\n`;for(const res of clients){if(res.writableLength>65536){clients.delete(res);res.end();}else res.write(data);}},8);
   timer.unref();
   server.on('close',()=>{clearInterval(timer);host.disconnect();for(const c of clients)c.end();});
   return {server,host,token,port,listen:()=>new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',()=>resolve(server.address()));}),close:()=>new Promise(resolve=>{for(const c of clients)c.end();server.close(resolve);})};
