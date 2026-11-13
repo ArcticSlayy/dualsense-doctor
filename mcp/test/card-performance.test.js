@@ -635,7 +635,7 @@ test('hands-off phases dominate the instruction and never infer completion from 
 test('latest near-center result explains game guidance and does not encourage another trial',()=>{
  const run=setup(),data=measuredRounds();data.latestComparison={comparable:true,acceptedRounds:1,left:measuredSide(.79,2),right:measuredSide(.79,2)};data.comparison={...data.latestComparison};data.seriesReset=true;
  run.accept({...run.input(),status:'complete',measurements:data,calibration:calibrationState('measured',{comparison:{before:data.latestComparison,after:null}})});
- assert.match(run.nodes.get('results-summary').textContent,/left 0.79%.*right 0.79%/);assert.match(run.nodes.get('results-next').textContent,/Keep the current calibration/);
+ assert.match(run.nodes.get('results-summary').textContent,/left 0.79%.*right 0.79%/);assert.match(run.nodes.get('results-title').textContent,/Keep your calibration/);
  assert.match(run.nodes.get('comparison-explainer').textContent,/fresh comparison.*Earlier reports remain saved/);
  assert.notEqual(run.nodes.get('calibration-trial').attributes.class,'primary');assert.equal(run.nodes.get('calibration-comparison').hidden,true);assert.deepEqual(controlCommands(run),[]);
  assert.ok(html.indexOf('id="results"')<html.indexOf('id="calibration"'));assert.ok(html.indexOf('id="calibration"')<html.indexOf('class="live-panel"'));
@@ -717,4 +717,23 @@ test('optional calibration stays collapsed while pending or uncertain workflows 
  }
  run.accept({...s,calibration:calibrationState('verified')});assert.equal(run.nodes.get('calibration').open,false);
  run.context.uncertain=true;vm.runInContext('calibrationRequestUncertain=true;calibrationView()',run.context);assert.equal(run.nodes.get('calibration').open,true);assert.match(run.nodes.get('calibration-toggle').textContent,/needs attention/);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('result takeaway distinguishes measured movement from game guidance and calibration persistence',()=>{
+ const run=setup(),data=measuredRounds();data.latestComparison={comparable:true,acceptedRounds:1,left:measuredSide(.79,2),right:measuredSide(.79,2)};data.comparison={...data.latestComparison};
+ const s={...run.input(),status:'complete',measurements:data,calibration:calibrationState('measured')};run.accept(s);
+ assert.equal(run.nodes.get('left-rest').textContent,'0.79%');assert.equal(run.nodes.get('left-deadzone').textContent,'2%');assert.match(run.nodes.get('results-title').textContent,/Keep your calibration/);
+ assert.match(run.nodes.get('results-effect').textContent,/did not adjust or save/);
+ for(const [stage,title,effect] of [['trial_applied',/Retest/,/temporary/],['ready_to_save',/before saving/,/separate decision/],['save_acknowledged',/verification is still needed/,/persistence still needs/],['verified',/matched after your confirmed restart/,/matched after/],['ambiguous',/uncertain/,/Do not infer/]]){
+  run.accept({...s,calibration:calibrationState(stage)});assert.match(run.nodes.get('results-title').textContent,title);assert.match(run.nodes.get('results-effect').textContent,effect);
+ }
+ run.accept({...s,measurements:{...data,latestComparison:{comparable:false,acceptedRounds:0}}});assert.equal(run.nodes.get('left-rest').textContent,'Unavailable');assert.match(run.nodes.get('results-title').textContent,/latest result unavailable/);
+ assert.deepEqual(controlCommands(run),[]);
+});
+
+test('pending and uncertain calibration override the ordinary result takeaway without sending commands',()=>{
+ const run=setup(),s={...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState('measured')};run.accept(s);
+ run.accept({...s,calibration:{...s.calibration,busy:true}});assert.equal(run.nodes.get('results-title').textContent,'Calibration is in progress');assert.match(run.nodes.get('results-next').textContent,/Wait/);
+ run.accept(s);vm.runInContext('calibrationRequestUncertain=true;measurements()',run.context);
+ assert.equal(run.nodes.get('results-title').textContent,'Wait for calibration status');assert.match(run.nodes.get('results-effect').textContent,/uncertain/);assert.deepEqual(controlCommands(run),[]);
 });
