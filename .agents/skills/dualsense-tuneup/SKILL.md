@@ -127,3 +127,10 @@ Results lead with the next decision, then movement measured at rest and a separa
 optional game-deadzone suggestion. Explain whether the current workflow is only a
 check, an unsaved trial or a save awaiting verification. Busy/uncertain operations
 take precedence over ordinary advice. Multi-check history is under optional repeats.
+
+If Save is unavailable after a completed retest, check the review status. The ten-minute
+review can expire while the temporary candidate remains unsaved. Choose Retest adjustment
+to obtain a fresh full review; do not recapture a new center, extend approval or save
+automatically. Old local save dates do not establish that this candidate was saved.
+See mcp/SAVE-REVIEW-RECOVERY.md. Axis microtrim is assessed in
+mcp/AXIS-MICROTRIM-ASSESSMENT.md and is not an implemented or qualified tool.

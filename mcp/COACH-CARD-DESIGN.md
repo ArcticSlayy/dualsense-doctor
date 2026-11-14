@@ -45,3 +45,8 @@ review, pending persistence verification or uncertain operation expands the
 existing calibration section and exposes its controls without a collapse toggle.
 Save/reboot confirmation and command errors remain outside hidden views. Preserve
 all existing freshness, identity, evidence and explicit-action gates.
+
+Show a server-backed save-review countdown without automatic action or urgency. Expiry
+explains that the trial is unsaved and points to Retest adjustment. Older hosts without
+a deadline get a refresh explanation, never an invented countdown or expiry cause.
+See SAVE-REVIEW-RECOVERY.md.
