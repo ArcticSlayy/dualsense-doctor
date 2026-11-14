@@ -272,12 +272,19 @@ export class CalibrationWorkflow {
     const review=active&&current.review;
     const comparison=active?current.comparison??null:matches?receipt.comparison??null:null;
     if(comparison!==this.#diagnosticsInput){this.#diagnosticsInput=comparison;this.#diagnosticsValue=calibrationDiagnostics(comparison);}
-    if(stage==='ready_to_save'&&(!review||this.#now()>=review.expiresAt||this.#now()<review.createdAt))stage='trial_applied';
+    let saveReview=null;
+    if(stage==='ready_to_save'){
+      const now=this.#now();
+      const status=!review?'unavailable':now<review.createdAt?'clock_changed':now>=review.expiresAt?'expired':'active';
+      saveReview={status,expiresAt:review?.expiresAt??null,remainingMs:status==='active'?review.expiresAt-now:0};
+      if(status!=='active')stage='trial_applied';
+    }
     const messages={unknown:'No calibration save history from this app is known for this controller.',measured:'Baseline checked. A temporary center adjustment can be tested next.',
       trial_applied:'Temporary center adjustment recorded. Complete a new check before reviewing a save.',ready_to_save:'Review these before and after measurements before saving the exact tested candidate.',
       save_acknowledged:'Save acknowledged locally. Confirm a real controller power cycle, then verify readback.',verified:'Calibration matched after the owner-confirmed controller restart.',
       ambiguous:'Save history is uncertain. Inspect the controller and local history; do not automatically repeat a save.',changed:'Controller identity, calibration words or mode changed. A fresh trial and review are required.'};
-    return {stage,message:this.needsRestart()?'A temporary center adjustment may have been interrupted. Confirm a real controller restart before another trial or save.':messages[stage]??messages.unknown,reviewId:stage==='ready_to_save'?review.id:null,
+    const reviewMessage=saveReview?.status==='expired'?'The 10-minute save review expired. The temporary adjustment is still unsaved. Choose Retest adjustment, then review the new results before saving. No new center trial is needed.':saveReview&&saveReview.status!=='active'?'The save review is unavailable or its clock changed. Choose Retest adjustment to create a fresh review of the existing temporary adjustment.':null;
+    return {stage,message:this.needsRestart()?'A temporary center adjustment may have been interrupted. Confirm a real controller restart before another trial or save.':reviewMessage||messages[stage]||messages.unknown,reviewId:stage==='ready_to_save'?review.id:null,saveReview,
       lastSavedAt:acknowledged?.acknowledgedAt??null,verifiedAt:matches?receipt.verifiedAt:null,
       historySource:'this_app',firmwareSaveTimestamp:null,comparison:copy(comparison),diagnostics:copy(this.#diagnosticsValue)};
   }

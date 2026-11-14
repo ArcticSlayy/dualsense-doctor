@@ -44,7 +44,7 @@ export class CoachHost {
   calibrationState() {
     let state=this.calibrationWorkflow?.snapshot()??{stage:'unknown',message:'Calibration workflow is unavailable.',lastSavedAt:null,verifiedAt:null,firmwareSaveTimestamp:null,historySource:'this_app'};
     if(this.calibrationInspectionPending){
-      state={...state,lastSavedAt:null,verifiedAt:null,reviewId:null,comparison:null,diagnostics:null};
+      state={...state,lastSavedAt:null,verifiedAt:null,reviewId:null,saveReview:null,comparison:null,diagnostics:null};
       if(!this.calibrationRequiresRestart)state={...state,stage:'unknown',message:'Inspect calibration history for this connection before using saved status.'};
     }
     const busy=!!this.calibrationOperation,idle=!busy&&!this.run&&!this.triggerCheckActive()&&!['running','paused'].includes(this.status);

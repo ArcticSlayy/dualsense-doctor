@@ -56,6 +56,14 @@ test('calibration capabilities and explicit confirmations reject unavailable wri
   const disabled=fixture({enableCalibration:false});assert.equal(disabled.host.calibrationState().actions.inspect,false);await assert.rejects(disabled.host.control('calibration_inspect'));
 });
 
+test('review metadata is withheld until this connection is inspected',()=>{
+ const f=fixture({stage:'ready_to_save',trialSession:sessionId});
+ f.state.saveReview={status:'active',remainingMs:600000,expiresAt:1804983000000};
+ assert.deepEqual(f.host.calibrationState().saveReview,f.state.saveReview);
+ f.host.calibrationInspectionPending=true;const state=f.host.calibrationState();
+ assert.equal(state.saveReview,null);assert.equal(state.reviewId,null);assert.equal(state.actions.save,false);assert.deepEqual(f.inputs,[]);
+});
+
 test('a worker operation excludes every other control and restores live ownership afterward',async()=>{
   const gate=deferred();const f=fixture({worker:()=>gate.promise});
   const operation=f.host.control('calibration_inspect');

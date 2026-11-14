@@ -39,6 +39,24 @@ test('locked mode alone cannot fabricate saved or unsaved history',t=>{
   assert.equal(flow.snapshot().lastSavedAt,null);assert.equal(flow.snapshot().firmwareSaveTimestamp,null);
 });
 
+test('review deadline projects expiry without changing the trial journal or authorizing save',t=>{
+ const {flow,ready,advance,dir,after}=setup(t),readyState=ready();
+ assert.equal(readyState.saveReview.status,'active');assert.equal(readyState.saveReview.remainingMs,600000);
+ const file=join(dir,readdirSync(dir).find(n=>n.endsWith('.json'))),original=readFileSync(file,'utf8');
+ advance(599999);assert.equal(flow.snapshot().saveReview.remainingMs,1);assert.equal(flow.snapshot().stage,'ready_to_save');
+ advance(1);const expired=flow.snapshot();assert.equal(expired.stage,'trial_applied');assert.equal(expired.reviewId,null);assert.equal(expired.saveReview.status,'expired');assert.equal(expired.saveReview.remainingMs,0);
+ assert.match(expired.message,/10-minute.*expired.*Retest adjustment.*No new center trial/);assert.equal(readFileSync(file,'utf8'),original);
+ assert.deepEqual(expired.comparison,readyState.comparison);assert.throws(()=>flow.assertSave({reviewId:readyState.reviewId,report:after,snapshot:snap(1)}),/expired/);
+});
+
+test('review clock rollback is explained and a new full retest refreshes review without a new trial',t=>{
+ const {flow,ready,advance,after}=setup(t),first=ready();advance(-1);
+ const invalid=flow.snapshot();assert.equal(invalid.saveReview.status,'clock_changed');assert.equal(invalid.reviewId,null);assert.match(invalid.message,/clock changed.*Retest/);
+ advance(600002);const fresh=structuredClone(after);fresh.captures.push(...after.captures.map(c=>({...c,number:c.number+5,at:c.at+'-new'})));
+ const renewed=flow.prepare(fresh,snap(1));assert.equal(renewed.stage,'ready_to_save');assert.notEqual(renewed.reviewId,first.reviewId);assert.equal(renewed.saveReview.remainingMs,600000);
+ assert.deepEqual(flow.assertSave({reviewId:renewed.reviewId,report:fresh,snapshot:snap(1)}).expectedWords,snap(1).words);
+});
+
 test('complete new-epoch retest produces exact private save candidate and sanitized comparison',t=>{
   const {flow,after,ready}=setup(t);const state=ready();assert.equal(state.stage,'ready_to_save');
   assert.equal(state.comparison.before.left.observedPeakPercent,3);assert.equal(state.comparison.after.left.observedPeakPercent,2);
