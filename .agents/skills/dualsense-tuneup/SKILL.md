@@ -143,3 +143,11 @@ The first Save action reveals and focuses the review group; only the separate Co
 action sends the write. An older local save date does not verify a newer candidate.
 Unplugging USB while the controller remains powered is not a power cycle, and
 I restarted — verify confirms the owner's actual restart rather than performing one.
+
+Use the same conservative complete-round recommendation in session reports and card
+comparisons; a clean final p99 must not erase earlier valid quiet peaks. Explain
+one-count quantization separately from game settings, and do not infer all samples
+were centered from a rounded mean or p99 of zero. Circle evidence requires complete
+continuous turns; disconnected arcs do not count. Release direction refers to the
+first outward excursion, while post-return peaks cover only the sampled 300 ms after
+return. They do not establish mechanical snapback. See mcp/MEASUREMENT-MATH.md.
