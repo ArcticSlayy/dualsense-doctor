@@ -94,6 +94,7 @@
     .calibration-actions button{min-height:44px;font-size:14px}
     .calibration-confirm{background:var(--coach-surface);border:1px solid var(--coach-line);border-radius:12px;padding:20px;margin:16px 0}
     .calibration-confirm p{font-size:15px;line-height:1.5}
+    .calibration-confirm:focus{outline:3px solid var(--ring);outline-offset:3px;scroll-margin-block:24px}
     .live-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
     .live-heading h3{font-size:17px;margin:0}.visual-controls{display:flex;gap:8px;flex-wrap:wrap}.visual-controls button{font-size:13px;min-height:44px}
     .action-status,.result-empty{border:1px solid var(--coach-line);border-radius:12px;background:var(--coach-surface);padding:16px;font-size:15px;line-height:1.5}
@@ -130,6 +131,7 @@
     .result-body .result-detail{font-size:13px}.result-body .result-note{margin:10px 0}
     .results .explanation,.results .tuning-details{margin-top:8px}.results summary{font-weight:550}
     @media(max-width:520px){.results{padding:0}.result-takeaway,.result-body{padding:18px 16px}.results .result-takeaway h3{font-size:21px}.result-values{gap:0}.recommendation-line{justify-content:space-between}}
+    .review-window{font-size:14px;line-height:1.5;padding:12px 14px;background:var(--coach-tint);border:1px solid var(--coach-line);border-radius:8px;margin:12px 0;font-variant-numeric:tabular-nums}
     @media(prefers-reduced-motion:reduce){button{transition:none}}
   </style>
 </head>
@@ -144,7 +146,7 @@
     <p class="feedback" id="feedback" data-warning="false">Start once, then follow the prompts. The coach checks each movement before continuing.</p>
     <div class="controls"><button id="start" class="primary" type="button" disabled>Start one check</button><button id="pause" type="button" disabled>Pause</button><button id="stop" type="button" disabled>Stop</button></div>
     </section>
-      <div class="calibration-confirm" id="calibration-confirm" role="group" aria-labelledby="calibration-confirm-title" hidden><p id="calibration-confirm-title"></p><p id="calibration-confirm-results"></p><div class="calibration-actions"><button type="button" class="primary" id="calibration-confirm-action">Confirm</button><button type="button" id="calibration-cancel">Cancel</button></div></div>
+      <div class="calibration-confirm" id="calibration-confirm" role="group" tabindex="-1" aria-labelledby="calibration-confirm-title" aria-describedby="calibration-confirm-results" hidden><p id="calibration-confirm-title"></p><p id="calibration-confirm-results"></p><div class="calibration-actions"><button type="button" class="primary" id="calibration-confirm-action">Confirm</button><button type="button" id="calibration-cancel">Cancel</button></div></div>
     <nav class="view-nav" aria-label="Studio views"><button id="nav-check" type="button" aria-pressed="true">Check</button><button id="nav-results" type="button" aria-pressed="false">Results</button><button id="nav-controller" type="button" aria-pressed="false">Controller</button></nav>
     <p id="action-status" class="action-status" role="status" hidden></p>
     <p id="results-empty" class="result-empty" data-pane="results" hidden></p>
@@ -155,9 +157,9 @@
     <details class="calibration" id="calibration" data-pane="results" aria-labelledby="calibration-title"><summary id="calibration-toggle">Optional: adjust controller calibration</summary><div class="calibration-body">
       <div class="calibration-heading"><h3 id="calibration-title">Controller calibration</h3><span class="calibration-stage" id="calibration-stage">Unknown</span></div>
       <p class="calibration-message" id="calibration-message" role="status">Complete a check to measure the sticks. Checking alone does not change calibration.</p>
-      <div class="calibration-comparison" id="calibration-comparison" hidden><div id="calibration-legacy"><p id="calibration-left"></p><p id="calibration-right"></p></div><section id="calibration-diagnostics" aria-labelledby="diagnostics-title" hidden><h4 id="diagnostics-title">Before / after adjustment</h4><div class="diagnostic-sticks"><table class="diagnostic-table"><caption>Left stick</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Change</th></tr></thead><tbody><tr><th scope="row">Resting peak</th><td id="diagnostic-left-quiet_peak-before">Unavailable</td><td id="diagnostic-left-quiet_peak-after">Unavailable</td><td id="diagnostic-left-quiet_peak-delta">Unavailable</td></tr><tr><th scope="row">Starting deadzone</th><td id="diagnostic-left-deadzone-before">Unavailable</td><td id="diagnostic-left-deadzone-after">Unavailable</td><td id="diagnostic-left-deadzone-delta">Unavailable</td></tr><tr><th scope="row">Circularity RMS</th><td id="diagnostic-left-circularity-before">Unavailable</td><td id="diagnostic-left-circularity-after">Unavailable</td><td id="diagnostic-left-circularity-delta">Unavailable</td></tr><tr><th scope="row">Range difference</th><td id="diagnostic-left-symmetry-before">Unavailable</td><td id="diagnostic-left-symmetry-after">Unavailable</td><td id="diagnostic-left-symmetry-delta">Unavailable</td></tr><tr><th scope="row">Release peak</th><td id="diagnostic-left-release_peak-before">Unavailable</td><td id="diagnostic-left-release_peak-after">Unavailable</td><td id="diagnostic-left-release_peak-delta">Unavailable</td></tr></tbody></table><table class="diagnostic-table"><caption>Right stick</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Change</th></tr></thead><tbody><tr><th scope="row">Resting peak</th><td id="diagnostic-right-quiet_peak-before">Unavailable</td><td id="diagnostic-right-quiet_peak-after">Unavailable</td><td id="diagnostic-right-quiet_peak-delta">Unavailable</td></tr><tr><th scope="row">Starting deadzone</th><td id="diagnostic-right-deadzone-before">Unavailable</td><td id="diagnostic-right-deadzone-after">Unavailable</td><td id="diagnostic-right-deadzone-delta">Unavailable</td></tr><tr><th scope="row">Circularity RMS</th><td id="diagnostic-right-circularity-before">Unavailable</td><td id="diagnostic-right-circularity-after">Unavailable</td><td id="diagnostic-right-circularity-delta">Unavailable</td></tr><tr><th scope="row">Range difference</th><td id="diagnostic-right-symmetry-before">Unavailable</td><td id="diagnostic-right-symmetry-after">Unavailable</td><td id="diagnostic-right-symmetry-delta">Unavailable</td></tr><tr><th scope="row">Release peak</th><td id="diagnostic-right-release_peak-before">Unavailable</td><td id="diagnostic-right-release_peak-after">Unavailable</td><td id="diagnostic-right-release_peak-delta">Unavailable</td></tr></tbody></table></div><p class="diagnostic-guide">Change is After − Before, in percentage points (pp). Circularity is descriptive; lower is not always better.</p><p id="diagnostics-review" class="diagnostic-review"></p></section></div>
+      <p id="calibration-review-window" class="review-window" hidden></p><div class="calibration-comparison" id="calibration-comparison" hidden><div id="calibration-legacy"><p id="calibration-left"></p><p id="calibration-right"></p></div><section id="calibration-diagnostics" aria-labelledby="diagnostics-title" hidden><h4 id="diagnostics-title">Before / after adjustment</h4><div class="diagnostic-sticks"><table class="diagnostic-table"><caption>Left stick</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Change</th></tr></thead><tbody><tr><th scope="row">Resting peak</th><td id="diagnostic-left-quiet_peak-before">Unavailable</td><td id="diagnostic-left-quiet_peak-after">Unavailable</td><td id="diagnostic-left-quiet_peak-delta">Unavailable</td></tr><tr><th scope="row">Starting deadzone</th><td id="diagnostic-left-deadzone-before">Unavailable</td><td id="diagnostic-left-deadzone-after">Unavailable</td><td id="diagnostic-left-deadzone-delta">Unavailable</td></tr><tr><th scope="row">Circularity RMS</th><td id="diagnostic-left-circularity-before">Unavailable</td><td id="diagnostic-left-circularity-after">Unavailable</td><td id="diagnostic-left-circularity-delta">Unavailable</td></tr><tr><th scope="row">Range difference</th><td id="diagnostic-left-symmetry-before">Unavailable</td><td id="diagnostic-left-symmetry-after">Unavailable</td><td id="diagnostic-left-symmetry-delta">Unavailable</td></tr><tr><th scope="row">Release peak</th><td id="diagnostic-left-release_peak-before">Unavailable</td><td id="diagnostic-left-release_peak-after">Unavailable</td><td id="diagnostic-left-release_peak-delta">Unavailable</td></tr></tbody></table><table class="diagnostic-table"><caption>Right stick</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Change</th></tr></thead><tbody><tr><th scope="row">Resting peak</th><td id="diagnostic-right-quiet_peak-before">Unavailable</td><td id="diagnostic-right-quiet_peak-after">Unavailable</td><td id="diagnostic-right-quiet_peak-delta">Unavailable</td></tr><tr><th scope="row">Starting deadzone</th><td id="diagnostic-right-deadzone-before">Unavailable</td><td id="diagnostic-right-deadzone-after">Unavailable</td><td id="diagnostic-right-deadzone-delta">Unavailable</td></tr><tr><th scope="row">Circularity RMS</th><td id="diagnostic-right-circularity-before">Unavailable</td><td id="diagnostic-right-circularity-after">Unavailable</td><td id="diagnostic-right-circularity-delta">Unavailable</td></tr><tr><th scope="row">Range difference</th><td id="diagnostic-right-symmetry-before">Unavailable</td><td id="diagnostic-right-symmetry-after">Unavailable</td><td id="diagnostic-right-symmetry-delta">Unavailable</td></tr><tr><th scope="row">Release peak</th><td id="diagnostic-right-release_peak-before">Unavailable</td><td id="diagnostic-right-release_peak-after">Unavailable</td><td id="diagnostic-right-release_peak-delta">Unavailable</td></tr></tbody></table></div><p class="diagnostic-guide">Change is After − Before, in percentage points (pp). Circularity is descriptive; lower is not always better.</p><p id="diagnostics-review" class="diagnostic-review"></p></section></div>
       <div class="calibration-actions"><button type="button" id="calibration-trial" class="primary" aria-describedby="calibration-help" hidden>Try temporary center adjustment</button><button type="button" id="calibration-retest" class="primary" aria-describedby="calibration-help" hidden>Retest adjustment</button><button type="button" id="calibration-save" class="primary" aria-describedby="calibration-help" hidden>Save calibration to controller…</button><button type="button" id="calibration-verify" class="primary" aria-describedby="calibration-help" hidden>I restarted — verify</button></div>
-      <p class="calibration-help" id="calibration-help">Waiting for calibration capabilities from the local coach.</p>
+      <p id="calibration-action-feedback" class="helper" role="status" hidden></p><p class="calibration-help" id="calibration-help">Waiting for calibration capabilities from the local coach.</p>
       <details class="calibration-details" id="calibration-details"><summary>Save history &amp; recovery options</summary>
       <ol class="calibration-steps" aria-label="Controller calibration steps"><li id="cal-step-check">Check</li><li id="cal-step-trial">Try center adjustment</li><li id="cal-step-retest">Retest</li><li id="cal-step-save">Save</li><li id="cal-step-verify">Verify restart</li></ol>
       <dl class="calibration-history"><div><dt>Last saved by this app</dt><dd id="calibration-saved-at">No app save recorded</dd></div><div><dt>Verified after restart</dt><dd id="calibration-verified-at">Not verified</dd></div></dl>
@@ -191,7 +193,7 @@
     let studioView='check',lastNavigationState=null;
     let lastInstruction='',lastWarning='',lastServerWarning='',stickyUntil=0,lastAnnounced='',lastSession='';
     let lastEffectAt='',lightbarPending=false,lastTriggerAt='',triggerPending=false,uiDirty=false,lastMeasurementsKey='',lastRoundTarget=null;
-    let lastCalibrationDisclosureStage=null;
+    let lastCalibrationDisclosureStage=null,lastReviewClockKey='',pendingCalibrationAction=null;
     let calibrationConfirmation=null,calibrationRequestUncertain=false,lastDiagnosticsKey='',cachedDiagnostics=null,lastDiagnosticsViewKey='';
     const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const lightbarPresets={violet:'#8057ff',blue:'#2f7dff',cyan:'#20c3c9',white:'#ffffff',red:'#ef5567',off:'#000000'};
@@ -386,20 +388,46 @@
       }catch(error){text('snapshot-status',error.message||'Could not create the snapshot in this browser.');}
     }
     $('snapshot').addEventListener('click',saveSnapshot);$('snapshot-close').addEventListener('click',()=>{$('snapshot-preview').hidden=true;});
-    function calibrationBusy(){return calibrationRequestUncertain||state?.calibration?.busy===true;}
+    function saveReviewNotice(now=performance.now()){
+      const cal=state?.calibration;
+      if(!cal||cal.inspectionNeeded||!['trial_applied','ready_to_save'].includes(cal.stage))return {kind:'none',refresh:false};
+      const review=cal.saveReview;
+      if(review?.status==='active'&&cal.stage==='ready_to_save'&&Number.isFinite(review.remainingMs)&&review.remainingMs>=0&&review.remainingMs<=600000){
+        const seconds=Math.ceil(Math.max(0,review.remainingMs-Math.max(0,now-lastMessageAt))/1000);
+        return seconds>0?{kind:'active',seconds,refresh:false}:{kind:'expired',refresh:true};
+      }
+      if(review?.status==='expired')return {kind:'expired',refresh:true};
+      if(review)return {kind:'refresh',refresh:true};
+      // Older hosts do not expose a deadline. Existing after-results plus a withdrawn
+      // review mean refresh is needed, but do not establish expiry as the cause.
+      if(cal.stage==='trial_applied'&&cal.comparison?.after)return {kind:'refresh',refresh:true};
+      return {kind:cal.stage==='ready_to_save'?'legacy':'none',refresh:false};
+    }
+    function reviewRecovery(notice=saveReviewNotice()){
+      return (notice.kind==='expired'?'The 10-minute save review expired. ':'The save review needs refreshing. ')+'Your temporary adjustment is still unsaved. Choose Retest adjustment, then review the new results and choose Save calibration to controller. No new center trial is needed.';
+    }
+    function reviewClock(now=performance.now()){
+      const notice=saveReviewNotice(now),cal=state?.calibration,key=JSON.stringify([notice.kind,notice.seconds,cal?.reviewId,calibrationBusy()]);
+      if(key===lastReviewClockKey)return;lastReviewClockKey=key;
+      const visible=notice.kind!=='none'&&!calibrationBusy();$('calibration-review-window').hidden=!visible;
+      if(visible)text('calibration-review-window',notice.kind==='active'?`Save review valid for ${Math.floor(notice.seconds/60)}:${String(notice.seconds%60).padStart(2,'0')}. Saving is optional. If the window expires, Retest adjustment refreshes the review.`:notice.refresh?reviewRecovery(notice):'Review the result before saving. If Save becomes unavailable, choose Retest adjustment.');
+      if(notice.refresh&&calibrationConfirmation?.action==='save'){calibrationConfirmation=null;$('calibration-confirm').hidden=true;$('calibration-action-feedback').hidden=true;}
+      calibrationView();measurements();
+    }
+    function calibrationBusy(){return calibrationRequestUncertain||pendingCalibrationAction!==null||state?.calibration?.busy===true;}
     function calibrationAllowed(action){
       const cal=state?.calibration;
       if(!cal||pending||calibrationBusy()||triggerInputActive()||cal.actions?.[action]!==true)return false;
-      if(action==='save')return cal.stage==='ready_to_save'&&typeof cal.reviewId==='string'&&Boolean(cal.reviewId);
+      if(action==='save')return !saveReviewNotice().refresh&&cal.stage==='ready_to_save'&&typeof cal.reviewId==='string'&&Boolean(cal.reviewId);
       return true;
     }
     function calibrationControls(){
-      const cal=state?.calibration,stage=cal?.stage||'unknown';
+      const cal=state?.calibration,stage=cal?.stage||'unknown',refresh=saveReviewNotice().refresh;
       const relevant={trial:['measured','changed'],retest:['trial_applied','ready_to_save'],save:['ready_to_save'],verify:['save_acknowledged','verified','ambiguous','changed'],reboot:['unknown','measured','trial_applied','ready_to_save','save_acknowledged','verified','ambiguous','changed']};
       for(const action of ['trial','retest','save','verify','inspect','reboot']){
-        const node=$('calibration-'+action);node.hidden=action!=='inspect'&&!relevant[action]?.includes(stage);node.disabled=!calibrationAllowed(action);
-        if(['trial','retest','save','verify'].includes(action))attr(node,'class',({trial_applied:'retest',ready_to_save:'save',save_acknowledged:'verify',ambiguous:'verify',changed:'verify'}[stage]===action)?'primary':'');
-        attr(node,'title',calibrationAllowed(action)?'':cal?.blockedReason||cal?.message||'This action is not available at this stage.');
+        const node=$('calibration-'+action);node.hidden=action!=='inspect'&&!(action==='save'&&refresh)&&!relevant[action]?.includes(stage);node.disabled=!calibrationAllowed(action);
+        if(['trial','retest','save','verify'].includes(action))attr(node,'class',((refresh?'retest':{trial_applied:'retest',ready_to_save:'save',save_acknowledged:'verify',ambiguous:'verify',changed:'verify'}[stage])===action)?'primary':'');
+        attr(node,'title',calibrationAllowed(action)?'':cal?.blockedReason||(refresh?reviewRecovery():null)||cal?.message||'This action is not available at this stage.');
       }
       $('calibration-confirm-action').disabled=!calibrationConfirmation||!calibrationAllowed(calibrationConfirmation.action);
     }
@@ -444,8 +472,8 @@
       text('diagnostics-review',diagnostics.review);
     }
     function calibrationView(){
-      const cal=state?.calibration,stage=cal?.stage||'unknown';
-      $('calibration-confirm').hidden=!calibrationConfirmation;
+      const cal=state?.calibration,stage=cal?.stage||'unknown',review=saveReviewNotice();
+      $('calibration-confirm').hidden=!calibrationConfirmation;$('calibration-action-feedback').hidden=!calibrationConfirmation;
       const labels={measured:'This check measured input only',trial_applied:'Temporary adjustment · unsaved',ready_to_save:'Retested · review before saving',save_acknowledged:'Save acknowledged · restart verification needed',verified:'Matched after your confirmed restart',ambiguous:'Verification inconclusive',changed:'Calibration changed',unknown:'Start with a check'};
       text('calibration-stage',labels[stage]||'Unknown');data($('calibration'),'stage',stage);
       const needsReview=calibrationBusy()||['trial_applied','ready_to_save','save_acknowledged','ambiguous','changed'].includes(stage);
@@ -456,14 +484,14 @@
       text('calibration-toggle',calibrationRequestUncertain?'Calibration request needs attention':cal?.busy?'Controller operation in progress':({trial_applied:'Temporary adjustment needs a retest',ready_to_save:'Review before saving to controller',save_acknowledged:'Saved: restart verification needed',verified:'Saved calibration & restart receipt',ambiguous:'Calibration outcome needs attention',changed:'Review changed controller calibration'}[stage]||'Optional: adjust controller calibration'));
       const countdown=Number.isFinite(cal?.countdownSeconds)&&cal.countdownSeconds>0?`Hands off both sticks · ${Math.ceil(cal.countdownSeconds)}s. `:'';
       const measuredMessage=stage==='measured'&&!cal?.busy&&!cal?.blockedReason?'Baseline recorded. A center adjustment is optional.':null;
-      text('calibration-message',countdown+(measuredMessage||cal?.message||'Complete a check to measure the sticks. Checking alone does not change calibration.'));
+      text('calibration-message',countdown+(pendingCalibrationAction?'Controller request sent. Waiting for its outcome; do not repeat the action.':calibrationRequestUncertain?'Controller request outcome is uncertain. Wait for server status before another action.':!calibrationBusy()&&review.refresh?'Temporary adjustment retained. It has not been saved.':measuredMessage||cal?.message||'Complete a check to measure the sticks. Checking alone does not change calibration.'));
       const current={unknown:0,measured:1,trial_applied:2,ready_to_save:3,save_acknowledged:4,verified:5}[stage];
       for(const [i,id] of ['check','trial','retest','save','verify'].entries()){const node=$('cal-step-'+id),status=current===undefined?'pending':i<current?'complete':i===current?'current':'pending';data(node,'status',status);attr(node,'aria-current',status==='current'?'step':'false');}
       const stamp=(value,empty)=>typeof value==='string'&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString():empty;
       text('calibration-saved-at',stamp(cal?.lastSavedAt,cal?'No app save recorded':'History unavailable'));text('calibration-verified-at',stamp(cal?.verifiedAt,cal?'Not verified':'Unavailable'));
       calibrationComparisonView();
-      text('calibration-help',calibrationRequestUncertain?'The calibration request timed out or lost its connection. The controller operation may still be running. Wait for server status before taking another action.':!cal?'Calibration controls require an updated local coach. Your check still measures input without applying calibration.':cal.busy?'Controller reserved for '+(cal.operation||'calibration')+'. Wait for the operation to finish.':cal.blockedReason||({measured:'You may keep the current calibration. Try another temporary center adjustment only if the measured offset or in-game drift warrants it; then retest.',trial_applied:'This adjustment is temporary. Retest with the same guided check before saving.',ready_to_save:'Review the before/after results. Saving writes this tested adjustment to controller memory.',save_acknowledged:'A save acknowledgement is recorded. Restart or unplug and reconnect the controller, then explicitly verify.',verified:'The server verified the reviewed calibration after your confirmed restart.',ambiguous:'The server could not establish persistence. Inspect the history before taking another action.',changed:'Current calibration differs from the reviewed record. Inspect it and run a new check.',unknown:'Use Start check above. You can review the results before making any change.'}[stage]||'Inspect the current state before continuing.'));
-      if(calibrationConfirmation&&(calibrationConfirmation.stage!==stage||calibrationConfirmation.reviewId!==(cal?.reviewId||null)||calibrationBusy())){calibrationConfirmation=null;$('calibration-confirm').hidden=true;}
+      text('calibration-help',pendingCalibrationAction?'Waiting for the controller operation to finish. Its outcome has not been confirmed.':calibrationRequestUncertain?'The calibration request timed out or lost its connection. The controller operation may still be running. Wait for server status before taking another action.':!cal?'Calibration controls require an updated local coach. Your check still measures input without applying calibration.':cal.busy?'Controller reserved for '+(cal.operation||'calibration')+'. Wait for the operation to finish.':cal.blockedReason||(review.refresh?'Retest adjustment measures this candidate again; it does not recapture the center.':null)||({measured:'You may keep the current calibration. Try another temporary center adjustment only if the measured offset or in-game drift warrants it; then retest.',trial_applied:'This adjustment is temporary. Retest with the same guided check before saving.',ready_to_save:'Review the before/after results. Saving writes this tested adjustment to controller memory.',save_acknowledged:'A save acknowledgement is recorded. Restart or unplug and reconnect the controller, then explicitly verify.',verified:'The server verified the reviewed calibration after your confirmed restart.',ambiguous:'The server could not establish persistence. Inspect the history before taking another action.',changed:'Current calibration differs from the reviewed record. Inspect it and run a new check.',unknown:'Use Start check above. You can review the results before making any change.'}[stage]||'Inspect the current state before continuing.'));
+      if(calibrationConfirmation&&(calibrationConfirmation.stage!==stage||calibrationConfirmation.reviewId!==(cal?.reviewId||null)||calibrationBusy()||(calibrationConfirmation.action==='save'&&review.refresh))){calibrationConfirmation=null;$('calibration-confirm').hidden=true;$('calibration-action-feedback').hidden=true;}
       calibrationControls();
     }
     function openCalibrationConfirmation(action){
@@ -473,15 +501,20 @@
       text('calibration-confirm-title',action==='save'?'Save this reviewed adjustment to controller memory?':unsaved?'Restart and discard the unsaved temporary adjustment?':'Restart the controller now?');
       text('calibration-confirm-results',action==='save'?calibrationResults().lines.join(' / ')+'. This writes the tested candidate to onboard memory. Verify persistence after a restart.':unsaved?'Restarting discards the unsaved adjustment. You will need to reconnect, then run a new check.':'The controller will disconnect and any unsaved calibration may be discarded. Reconnect it, then choose “I restarted — verify”.');
       text('calibration-confirm-action',action==='save'?'Confirm save to controller':'Restart controller');$('calibration-confirm').hidden=false;calibrationControls();
+      text('calibration-action-feedback',action==='save'?'Confirmation opened above. Review it and choose Confirm save to controller. No save has been sent yet.':'Confirmation opened above. No restart has been sent yet.');$('calibration-action-feedback').hidden=false;
+      // Focus the review group, not the destructive/committing button. A second
+      // explicit activation is still required to send a controller command.
+      $('calibration-confirm').focus({preventScroll:true});
+      $('calibration-confirm').scrollIntoView({block:'center',behavior:reducedMotion?'auto':'smooth'});
     }
     for(const [id,action,payload] of [['trial','calibration_trial',{confirm:'TRY_TEMPORARY_CENTER'}],['retest','calibration_retest',{}],['inspect','calibration_inspect',{}],['verify','calibration_verify',{restartConfirmed:true}]])$('calibration-'+id).addEventListener('click',()=>{if(calibrationAllowed(id))command(action,payload);});
     $('calibration-save').addEventListener('click',()=>openCalibrationConfirmation('save'));
     $('calibration-reboot').addEventListener('click',()=>openCalibrationConfirmation('reboot'));
-    $('calibration-cancel').addEventListener('click',()=>{calibrationConfirmation=null;$('calibration-confirm').hidden=true;});
+    $('calibration-cancel').addEventListener('click',()=>{calibrationConfirmation=null;$('calibration-confirm').hidden=true;$('calibration-action-feedback').hidden=true;});
     $('calibration-confirm-action').addEventListener('click',()=>{
       const confirmation=calibrationConfirmation,cal=state?.calibration;
       if(!confirmation||!calibrationAllowed(confirmation.action)||cal.stage!==confirmation.stage||(cal.reviewId||null)!==confirmation.reviewId)return;
-      calibrationConfirmation=null;$('calibration-confirm').hidden=true;
+      calibrationConfirmation=null;$('calibration-confirm').hidden=true;$('calibration-action-feedback').hidden=true;
       if(confirmation.action==='save')command('calibration_save',{confirm:'SAVE_REVIEWED_CALIBRATION',reviewId:confirmation.reviewId});
       else command('calibration_reboot',{confirm:'REBOOT_CONTROLLER',...(confirmation.unsaved?{discardUnsaved:true}:{})});
     });
@@ -490,7 +523,7 @@
       const target=[1,3,5].includes(data.targetRounds)?data.targetRounds:null;
       if(target!==null&&target!==lastRoundTarget){$('round-target').value=String(target);lastRoundTarget=target;}
       const stage=state?.calibration?.stage;
-      const key=JSON.stringify([comparison,rows,data.latestComparison,data.seriesReset,data.tuning,state?.status,stage,state?.calibration?.busy,calibrationRequestUncertain,$('round-target').value]);if(key===lastMeasurementsKey)return;lastMeasurementsKey=key;
+      const key=JSON.stringify([comparison,rows,data.latestComparison,data.seriesReset,data.tuning,state?.status,stage,state?.calibration?.busy,calibrationRequestUncertain,pendingCalibrationAction,saveReviewNotice().kind,$('round-target').value]);if(key===lastMeasurementsKey)return;lastMeasurementsKey=key;
       const validPercent=(n,max=150)=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=max;
       const percent=(n,max=150)=>validPercent(n,max)?n.toFixed(2).replace(/\.?0+$/,'')+'%':'Unavailable';
       // Old hosts expose each completed round separately. That is a latest-check
@@ -511,9 +544,9 @@
       const usableCandidate=value=>value?.reliable!==false&&validPercent(value?.suggestedDeadzonePercent,20);
       const recommendationAvailable=['left','right'].every(side=>usableCandidate(recommendation?.[side]));
       const titleByStage={trial_applied:'Retest this temporary adjustment',ready_to_save:'Review the retest before saving',save_acknowledged:'Restart verification is still needed',verified:'Saved values matched after your confirmed restart',ambiguous:'Review the uncertain calibration outcome',changed:'Review the changed calibration'};
-      text('results-title',calibrationRequestUncertain?'Wait for calibration status':state?.calibration?.busy?'Calibration is in progress':titleByStage[stage]||(!latest&&comparable?'Earlier accepted checks · latest result unavailable':!latest||!recommendationAvailable?'Repeat a clean check before deciding':quietKnown&&left<=.8&&right<=.8?'Keep your calibration. Try it in game.':'Try it in game before changing calibration'));
-      text('results-effect',calibrationRequestUncertain?'The request outcome is uncertain. Follow the calibration guidance below before another action.':state?.calibration?.busy?'A controller operation is still running. Wait for it to finish.':stage==='trial_applied'||stage==='ready_to_save'?'A temporary adjustment is active. Saving it is a separate decision below.':stage==='save_acknowledged'?'A save acknowledgement is recorded; persistence still needs verification.':stage==='verified'?'The reviewed values matched after your restart confirmation.':stage==='ambiguous'||stage==='changed'?'Calibration status needs review below. Do not infer that an adjustment was saved.':'This check measured input. It did not adjust or save controller calibration.');
-      text('results-next',calibrationRequestUncertain?'The connection did not confirm the request outcome. Do not repeat the action while its status is unresolved.':state?.calibration?.busy?'Wait for the current operation to finish before deciding what to do next.':nextByStage[stage]||(!latest?'Repeat a clean check to obtain a current result, or start a fresh comparison below. Earlier evidence is not a new calibration.':!recommendationAvailable?'A reliable game-deadzone starting point is unavailable. Review the measured movement and repeat a clean hands-off check before considering an adjustment.':null)||(quietKnown&&left<=.8&&right<=.8?'Both sticks stayed close to center in this recording. Keep your current game deadzone if it feels stable; the suggestion below is optional.':'Try the controller in game. Keep your existing deadzone if it is stable, or try the conservative suggestion below. Repeat a check only if unwanted movement needs investigating.'));
+      text('results-title',pendingCalibrationAction?'Waiting for controller confirmation':calibrationRequestUncertain?'Wait for calibration status':state?.calibration?.busy?'Calibration is in progress':saveReviewNotice().refresh?'Retest to refresh the save review':titleByStage[stage]||(!latest&&comparable?'Earlier accepted checks · latest result unavailable':!latest||!recommendationAvailable?'Repeat a clean check before deciding':quietKnown&&left<=.8&&right<=.8?'Keep your calibration. Try it in game.':'Try it in game before changing calibration'));
+      text('results-effect',pendingCalibrationAction?'A controller request has been sent. Its outcome is not confirmed yet.':calibrationRequestUncertain?'The request outcome is uncertain. Follow the calibration guidance below before another action.':state?.calibration?.busy?'A controller operation is still running. Wait for it to finish.':stage==='trial_applied'||stage==='ready_to_save'?'A temporary adjustment is active. Saving it is a separate decision below.':stage==='save_acknowledged'?'A save acknowledgement is recorded; persistence still needs verification.':stage==='verified'?'The reviewed values matched after your restart confirmation.':stage==='ambiguous'||stage==='changed'?'Calibration status needs review below. Do not infer that an adjustment was saved.':'This check measured input. It did not adjust or save controller calibration.');
+      text('results-next',pendingCalibrationAction?'Wait for the current request to finish before deciding whether any further action is needed.':calibrationRequestUncertain?'The connection did not confirm the request outcome. Do not repeat the action while its status is unresolved.':state?.calibration?.busy?'Wait for the current operation to finish before deciding what to do next.':saveReviewNotice().refresh?'Save needs a fresh review. Choose Retest adjustment below; your temporary adjustment is unchanged.':nextByStage[stage]||(!latest?'Repeat a clean check to obtain a current result, or start a fresh comparison below. Earlier evidence is not a new calibration.':!recommendationAvailable?'A reliable game-deadzone starting point is unavailable. Review the measured movement and repeat a clean hands-off check before considering an adjustment.':null)||(quietKnown&&left<=.8&&right<=.8?'Both sticks stayed close to center in this recording. Keep your current game deadzone if it feels stable; the suggestion below is optional.':'Try the controller in game. Keep your existing deadzone if it is stable, or try the conservative suggestion below. Repeat a check only if unwanted movement needs investigating.'));
       for(const side of ['left','right']){
         const value=recommendation?.[side],last=latest?.[side];
         const candidate=usableCandidate(value)?value.suggestedDeadzonePercent:null;
@@ -576,14 +609,14 @@
       poll();pollTimer=setInterval(poll,33);
     }
     async function command(action,payload={}){
-      if(stopped||pending||(calibrationBusy()&&!action.startsWith('calibration_'))||(triggerInputActive()&&!['trigger_check_stop','disconnect'].includes(action)))return false;pending=true;$('action-status').hidden=true;controls();
+      if(stopped||pending||(calibrationBusy()&&!action.startsWith('calibration_'))||(triggerInputActive()&&!['trigger_check_stop','disconnect'].includes(action)))return false;pending=true;pendingCalibrationAction=action.startsWith('calibration_')?action:null;$('action-status').hidden=true;controls();if(pendingCalibrationAction){calibrationView();measurements();}
       try{
         const r=await fetch(url('/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action}),referrerPolicy:'no-referrer',signal:AbortSignal.timeout(action.startsWith('calibration_')?60000:8000)});
         const data=await r.json();if(!r.ok||data.error)throw Error(data.error||'Could not '+action);
         if(data.state)accept(data.state,'poll');else if(Object.hasOwn(data,'connected'))accept(data,'poll');
         lastSseAt=0;await poll();return true;
       }catch(e){if(action.startsWith('calibration_')&&['TimeoutError','AbortError','TypeError'].includes(e.name)){calibrationRequestUncertain=true;lastControlKey='';e=new Error('The calibration request timed out or lost its connection. The controller operation may still be running. Wait for server status; inspect the result before deciding what to do.');calibrationView();}lastWarning=e.message;stickyUntil=performance.now()+5000;text('feedback',e.message);$('feedback').dataset.warning='true';if(action==='lightbar'||action==='triggers'){const id=action==='lightbar'?'lightbar-status':'trigger-status';text(id,e.message);$(id).dataset.error='true';}text('action-status',e.message);$('action-status').hidden=false;announce(e.message);return false;}
-      finally{pending=false;controls();}
+      finally{pending=false;pendingCalibrationAction=null;controls();calibrationView();measurements();}
     }
     function startRound(){const roundTarget=Number($('round-target').value);if(![1,3,5].includes(roundTarget)||pending||calibrationBusy()||!fresh()||['running','paused'].includes(state?.status)||['trial_applied','ready_to_save'].includes(state?.calibration?.stage))return;command('start',{roundTarget});}
     $('round-target').value='1';$('round-target').addEventListener('change',()=>{lastMeasurementsKey='';measurements();});
@@ -722,6 +755,7 @@
       const workStarted=performance.now();
       if(document.hidden){lastFreshFrameAt=null;rafId=requestAnimationFrame(frame);return;}
       if(uiDirty)renderState(now);else timer(now);
+      reviewClock(now);
       const live=fresh();
       if(live){frameCount++;freshPlotFrames++;draw(now);}
       else{if(wasLive){resetMetrics(now);neutralize();}guidance();connection();controls();if(state?.connected&&!calibrationBusy()){text('feedback','Input paused. Waiting for fresh controller readings.');data($('feedback'),'warning',false);}}

@@ -5,16 +5,16 @@ import vm from 'node:vm';
 
 const html=readFileSync(new URL('../coach-card.html',import.meta.url),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replaceAll('__API_BASE__','http://127.0.0.1:27892').replaceAll('__TOKEN__','test-token');
-function setup({storedPreferences,blockedStorage=false,controlResponse,controlError,deferUi=false,reducedMotion=false}={}){
+function setup({storedPreferences,blockedStorage=false,controlResponse,controlError,controlPromise,deferUi=false,reducedMotion=false}={}){
   let now=1000,nextId=1;const frames=new Map(),intervals=new Map(),listeners=new Map(),requests=[],timeouts=[],nodes=new Map(),storage=new Map(),downloads=[],canvasWrites=[],datasetWrites=[];
   const drawing={measureText:value=>({width:String(value).length*11}),fillText:(...args)=>canvasWrites.push(args)};for(const method of ['fillRect','beginPath','arc','stroke','moveTo','lineTo','setLineDash','fill'])drawing[method]=()=>{};
   if(storedPreferences)storage.set('dualsense-coach-display',JSON.stringify(storedPreferences));
-  for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{_textContent:'',textWrites:[],get textContent(){return this._textContent;},set textContent(value){this._textContent=value;this.textWrites.push(value);},attributes:{},writes:[],style:{},dataset:new Proxy({}, {set(target,key,value){datasetWrites.push([match[1],key,value]);target[key]=value;return true;}}),disabled:false,hidden:false,value:'',checked:false,children:[],replaceChildren(){this.children=[];},append(child){this.children.push(child);},listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
+  for(const match of html.matchAll(/\bid="([^"]+)"/g))nodes.set(match[1],{_textContent:'',textWrites:[],get textContent(){return this._textContent;},set textContent(value){this._textContent=value;this.textWrites.push(value);},attributes:{},writes:[],style:{},dataset:new Proxy({}, {set(target,key,value){datasetWrites.push([match[1],key,value]);target[key]=value;return true;}}),focusCalls:[],scrollCalls:[],focus(options){this.focusCalls.push(options);},scrollIntoView(options){this.scrollCalls.push(options);},disabled:false,hidden:false,value:'',checked:false,children:[],replaceChildren(){this.children=[];},append(child){this.children.push(child);},listeners:new Map(),getAttribute(k){return this.attributes[k]??null;},setAttribute(k,v){this.attributes[k]=String(v);this.writes.push([k,String(v)]);},addEventListener(name,fn){this.listeners.set(name,fn);}});
   class EventSource{constructor(){this.closed=false;}addEventListener(){}close(){this.closed=true;}}
   const context=vm.createContext({document:{hidden:false,addEventListener:(name,fn)=>listeners.set(name,fn),createElement:tag=>tag==='canvas'?{getContext:()=>drawing,toDataURL:()=> 'data:image/png;base64,c3ludGhldGlj'}:{click(){downloads.push({href:this.href,download:this.download});}},getElementById:id=>{assert.ok(nodes.has(id),id);return nodes.get(id);}},performance:{now:()=>now},URL,AbortSignal:{timeout:ms=>{timeouts.push(ms);return AbortSignal.timeout(ms);}},
     requestAnimationFrame:fn=>{const id=nextId++;frames.set(id,fn);return id;},cancelAnimationFrame:id=>frames.delete(id),
     setInterval:(fn,ms)=>{const id=nextId++;intervals.set(id,{fn,ms});return id;},clearInterval:id=>intervals.delete(id),
-    EventSource,fetch:(url,options)=>{requests.push({url:String(url),options});if(String(url).includes('/control')&&controlError)return Promise.reject(controlError);if(String(url).includes('/control')&&controlResponse)return Promise.resolve({ok:controlResponse.ok!==false,json:async()=>controlResponse.body??{connected:true,status:'idle'}});return new Promise(()=>{});},
+    EventSource,fetch:(url,options)=>{requests.push({url:String(url),options});if(String(url).includes('/control')&&controlPromise)return controlPromise;if(String(url).includes('/control')&&controlError)return Promise.reject(controlError);if(String(url).includes('/control')&&controlResponse)return Promise.resolve({ok:controlResponse.ok!==false,json:async()=>controlResponse.body??{connected:true,status:'idle'}});return new Promise(()=>{});},
     localStorage:{getItem(key){if(blockedStorage)throw Error('storage blocked');return storage.get(key)??null;},setItem(key,value){if(blockedStorage)throw Error('storage blocked');storage.set(key,String(value));}},
     window:{addEventListener:(name,fn)=>listeners.set(name,fn),matchMedia:()=>({matches:reducedMotion})},console});
   vm.runInContext(script,context);
@@ -346,7 +346,7 @@ test('calibration stages reflect server evidence and never send an automatic com
  for(const [stage,expected] of [['measured','This check measured input only'],['trial_applied','Temporary adjustment · unsaved'],['ready_to_save','Retested · review before saving'],['save_acknowledged','Save acknowledged · restart verification needed'],['verified','Matched after your confirmed restart'],['ambiguous','Verification inconclusive'],['changed','Calibration changed'],['unknown','Start with a check']]){
   run.accept({...run.input(),status:'complete',calibration:calibrationState(stage)});
   assert.equal(run.nodes.get('calibration-stage').textContent,expected);
-  assert.equal(run.nodes.get('calibration-message').textContent,stage==='measured'?'Baseline recorded. A center adjustment is optional.':'Server calibration state: '+stage);
+  if(stage==='trial_applied')assert.match(run.nodes.get('calibration-message').textContent,/Temporary adjustment retained/);else assert.equal(run.nodes.get('calibration-message').textContent,stage==='measured'?'Baseline recorded. A center adjustment is optional.':'Server calibration state: '+stage);
   assert.equal(run.nodes.get('calibration-save').disabled,stage!=='ready_to_save');
   assert.equal(run.nodes.get('calibration-retest').disabled,stage!=='trial_applied');
   assert.equal(run.nodes.get('calibration-trial').disabled,stage!=='measured');
@@ -736,4 +736,65 @@ test('pending and uncertain calibration override the ordinary result takeaway wi
  run.accept({...s,calibration:{...s.calibration,busy:true}});assert.equal(run.nodes.get('results-title').textContent,'Calibration is in progress');assert.match(run.nodes.get('results-next').textContent,/Wait/);
  run.accept(s);vm.runInContext('calibrationRequestUncertain=true;measurements()',run.context);
  assert.equal(run.nodes.get('results-title').textContent,'Wait for calibration status');assert.match(run.nodes.get('results-effect').textContent,/uncertain/);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('save-review countdown expires an open confirmation without writing and points to retest',()=>{
+ const run=setup(),cal=calibrationState('ready_to_save',{saveReview:{status:'active',remainingMs:2100,expiresAt:'2026-01-01T00:00:02.100Z'}});
+ run.accept({...run.input(),status:'complete',measurements:measuredRounds(),calibration:cal});run.step();
+ assert.match(run.nodes.get('calibration-review-window').textContent,/0:03/);run.click('calibration-save');assert.equal(run.nodes.get('calibration-confirm').hidden,false);
+ run.step(2101);assert.equal(run.nodes.get('calibration-save').disabled,true);assert.equal(run.nodes.get('calibration-confirm').hidden,true);assert.equal(run.nodes.get('calibration-save').hidden,false);
+ assert.match(run.nodes.get('calibration-review-window').textContent,/expired.*Retest adjustment/);assert.match(run.nodes.get('results-title').textContent,/Retest to refresh/);
+ run.click('calibration-confirm-action');run.click('calibration-save');assert.deepEqual(controlCommands(run),[]);
+});
+
+test('server expiry and older-host withdrawn reviews recover without assuming a new trial or saved candidate',()=>{
+ for(const saveReview of [{status:'expired',remainingMs:0},{status:'clock_changed',remainingMs:0},undefined]){
+  const run=setup(),cal=calibrationState('trial_applied',{saveReview});cal.reviewId=null;cal.actions.save=false;
+  run.accept({...run.input(),status:'complete',measurements:measuredRounds(),calibration:cal});run.step();
+  assert.match(run.nodes.get('calibration-review-window').textContent,/Retest adjustment.*No new center trial/);assert.equal(run.nodes.get('calibration-save').disabled,true);assert.equal(run.nodes.get('calibration-trial').hidden,true);
+  if(!saveReview)assert.doesNotMatch(run.nodes.get('calibration-review-window').textContent,/expired/);
+  assert.deepEqual(controlCommands(run),[]);
+ }
+});
+
+test('missing deadline never invents a timer and a busy operation hides the refresh prompt',()=>{
+ const run=setup(),cal=calibrationState('ready_to_save');run.accept({...run.input(),calibration:cal});run.step();
+ assert.match(run.nodes.get('calibration-review-window').textContent,/If Save becomes unavailable/);assert.doesNotMatch(run.nodes.get('calibration-review-window').textContent,/\d:\d{2}/);assert.equal(run.nodes.get('calibration-save').disabled,false);
+ run.accept({...run.input(),calibration:{...cal,busy:true,saveReview:{status:'expired',remainingMs:0}}});run.step();assert.equal(run.nodes.get('calibration-review-window').hidden,true);assert.match(run.nodes.get('results-title').textContent,/in progress/);assert.deepEqual(controlCommands(run),[]);
+});
+
+test('resuming a hidden tab cannot reuse an expired save confirmation and invalid countdown metadata fails closed',()=>{
+ const run=setup(),s={...run.input(),calibration:calibrationState('ready_to_save',{saveReview:{status:'active',remainingMs:1000}})};
+ run.accept(s);run.click('calibration-save');run.hidden(true);run.step(1200);run.hidden(false);run.step();
+ assert.equal(run.nodes.get('calibration-confirm').hidden,true);assert.equal(run.nodes.get('calibration-save').disabled,true);
+ for(const remainingMs of [-1,Infinity,'600000',600001]){
+  run.accept({...s,calibration:{...s.calibration,saveReview:{status:'active',remainingMs}}});assert.equal(run.nodes.get('calibration-save').disabled,true);
+ }
+ assert.deepEqual(controlCommands(run),[]);
+});
+
+test('Save reveals and focuses its review group without committing; only explicit confirmation sends once',()=>{
+ for(const reducedMotion of [false,true]){
+  const run=setup({reducedMotion});run.accept({...run.input(),calibration:calibrationState('ready_to_save')});run.click('calibration-save');
+  const group=run.nodes.get('calibration-confirm');assert.equal(group.hidden,false);assert.equal(group.focusCalls.length,1);assert.equal(group.focusCalls[0].preventScroll,true);
+  assert.equal(group.scrollCalls[0].block,'center');assert.equal(group.scrollCalls[0].behavior,reducedMotion?'auto':'smooth');assert.equal(run.nodes.get('calibration-confirm-action').focusCalls.length,0);
+  assert.equal(run.nodes.get('calibration-action-feedback').hidden,false);assert.match(run.nodes.get('calibration-action-feedback').textContent,/No save has been sent yet/);assert.deepEqual(controlCommands(run),[]);
+  run.click('calibration-cancel');assert.equal(group.hidden,true);assert.equal(run.nodes.get('calibration-action-feedback').hidden,true);assert.deepEqual(controlCommands(run),[]);
+  run.click('calibration-save');run.click('calibration-confirm-action');run.click('calibration-confirm-action');assert.deepEqual(controlCommands(run),[{confirm:'SAVE_REVIEWED_CALIBRATION',reviewId:'review-123',action:'calibration_save'}]);
+ }
+ assert.match(html,/id="calibration-confirm" role="group" tabindex="-1".*aria-describedby="calibration-confirm-results"/);
+});
+
+test('expiry during an in-flight Save never declares unsaved or asks for another retest/save',async()=>{
+ for(const outcome of ['acknowledged','uncertain']){
+  let resolve,reject;const controlPromise=new Promise((yes,no)=>{resolve=yes;reject=no;});const run=setup({controlPromise});
+  const s={...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState('ready_to_save',{saveReview:{status:'active',remainingMs:1000}})};
+  run.accept(s);run.click('calibration-save');run.click('calibration-confirm-action');run.step(1100);
+  assert.equal(run.nodes.get('calibration-review-window').hidden,true);assert.equal(run.nodes.get('results-title').textContent,'Waiting for controller confirmation');
+  for(const id of ['results-next','results-effect','calibration-message','calibration-help'])assert.doesNotMatch(run.nodes.get(id).textContent,/unsaved|not been saved|Retest adjustment|choose Save/i,id);
+  assert.match(run.nodes.get('calibration-message').textContent,/Waiting for its outcome/);assert.equal(controlCommands(run).length,1);
+  if(outcome==='acknowledged')resolve({ok:true,json:async()=>({state:{...s,calibration:calibrationState('save_acknowledged')}})});else reject(new TypeError('Network response lost'));
+  await new Promise(r=>setImmediate(r));run.step();
+  assert.match(run.nodes.get('results-title').textContent,outcome==='acknowledged'?/Restart verification/:/Wait for calibration status/);assert.equal(controlCommands(run).length,1);
+ }
 });
