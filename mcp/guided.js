@@ -7,6 +7,7 @@ import { listControllers } from './hid/dualsense.js';
 export { withController } from './hid/controller-session.js';
 import { StickCoach } from './coach.js';
 import { assessStickTuning } from './stick-tuning.js';
+import { compareSessionReports } from './session-comparison.js';
 
 export const PHASES = {
   rest: 'Put the controller down. Leave BOTH sticks completely untouched for 5 seconds.',
@@ -139,9 +140,11 @@ export class SessionStore {
     const epoch=s.calibrationActions?.length||0;
     const latest=Object.fromEntries(Object.keys(PHASES).map(p=>[p,s.captures.filter(c=>c.phase===p&&(c.calibrationEpoch||0)===epoch).at(-1)]));
     const complete=Object.values(latest).every(c=>c?.metrics.valid) && Object.entries(latest).every(([p,c])=>p==='verify'||c.number<latest.verify.number) && new Set(Object.values(latest).map(c=>c?.metrics.mode)).size===1;
-    const finalRest=s.captures.filter(c=>c.phase==='rest'||c.phase==='verify').at(-1);
-    const deadzones=finalRest?.metrics.valid&&(finalRest.calibrationEpoch||0)===epoch?{left:finalRest.metrics.left.deadzonePercent,right:finalRest.metrics.right.deadzonePercent}:null;
-    const report={...s,complete,logPath:join(this.dir(id),'summary.md'),recommendation:{radialDeadzonePercent:deadzones,applied:false,note:`Measured p99 rest radius + 1 percentage point. Candidate for game settings; verify in play. ${calibrationSummary(s)}`,nextAction:!complete?'Repeat missing/invalid phases before deciding.':'Review measured center and circularity; game deadzones are separate settings. On-controller changes need verified before/after measurements.'},comparison:rests.length>1&&sameMode?{leftOffsetDeltaRaw:round(last.metrics.left.offsetRaw-first.metrics.left.offsetRaw),rightOffsetDeltaRaw:round(last.metrics.right.offsetRaw-first.metrics.right.offsetRaw),leftJitterDeltaRaw:round(last.metrics.left.jitterRaw-first.metrics.left.jitterRaw),rightJitterDeltaRaw:round(last.metrics.right.jitterRaw-first.metrics.right.jitterRaw),note:'Last valid rest minus first valid rest; negative is less measured offset/noise. No causal improvement claim.'}:null};
+    // Use the same current-epoch evidence as the card/comparison. A clean final
+    // p99 alone must not erase earlier valid quiet movement or incomplete phases.
+    const comparison=compareSessionReports([{...s,complete}]);
+    const deadzones=comparison.comparable?{left:comparison.left.suggestedDeadzonePercent,right:comparison.right.suggestedDeadzonePercent}:null;
+    const report={...s,complete,logPath:join(this.dir(id),'summary.md'),recommendation:{radialDeadzonePercent:deadzones,applied:false,note:`Worst observed clean quiet peak + 1 percentage point, rounded up. Optional game-setting starting point, not a minimum; verify in play. ${calibrationSummary(s)}`,nextAction:!complete?'Repeat missing/invalid phases before deciding.':'Review measured center and circularity; game deadzones are separate settings. On-controller changes need verified before/after measurements.'},comparison:rests.length>1&&sameMode?{leftOffsetDeltaRaw:round(last.metrics.left.offsetRaw-first.metrics.left.offsetRaw),rightOffsetDeltaRaw:round(last.metrics.right.offsetRaw-first.metrics.right.offsetRaw),leftJitterDeltaRaw:round(last.metrics.left.jitterRaw-first.metrics.left.jitterRaw),rightJitterDeltaRaw:round(last.metrics.right.jitterRaw-first.metrics.right.jitterRaw),note:'Last valid rest minus first valid rest; negative is less measured offset/noise. No causal improvement claim.'}:null};
     return {...report,tuning:assessStickTuning(report)};
   }
   log(s) {
