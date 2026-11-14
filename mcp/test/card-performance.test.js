@@ -365,7 +365,7 @@ test('temporary trial is explicit and its hands-off countdown follows server evi
  assert.deepEqual(controlCommands(run),[{confirm:'TRY_TEMPORARY_CENTER',action:'calibration_trial'}]);
  const countdown=setup();countdown.accept({...countdown.input(),latest:null,calibration:calibrationState('measured',{busy:true,operation:'temporary center adjustment',countdownSeconds:3})});
  assert.match(countdown.nodes.get('calibration-message').textContent,/Hands off both sticks · 3s/);
- countdown.step(3500);assert.match(countdown.nodes.get('calibration-stage').textContent,/measured input only/);assert.deepEqual(controlCommands(countdown),[]);
+ countdown.step(3500);assert.equal(countdown.nodes.get('calibration-stage').textContent,'Controller operation in progress');assert.equal(countdown.nodes.get('calibration').dataset.stage,'measured');assert.deepEqual(controlCommands(countdown),[]);
 });
 
 test('save requires inline review confirmation and sends the server reviewId once',()=>{
@@ -761,6 +761,8 @@ test('missing deadline never invents a timer and a busy operation hides the refr
  const run=setup(),cal=calibrationState('ready_to_save');run.accept({...run.input(),calibration:cal});run.step();
  assert.match(run.nodes.get('calibration-review-window').textContent,/If Save becomes unavailable/);assert.doesNotMatch(run.nodes.get('calibration-review-window').textContent,/\d:\d{2}/);assert.equal(run.nodes.get('calibration-save').disabled,false);
  run.accept({...run.input(),calibration:{...cal,busy:true,saveReview:{status:'expired',remainingMs:0}}});run.step();assert.equal(run.nodes.get('calibration-review-window').hidden,true);assert.match(run.nodes.get('results-title').textContent,/in progress/);assert.deepEqual(controlCommands(run),[]);
+ run.accept({...run.input(),calibration:{...cal,stage:'trial_applied',busy:true,saveReview:{status:'expired',remainingMs:0}}});assert.equal(run.nodes.get('calibration-stage').textContent,'Controller operation in progress');
+ vm.runInContext('calibrationRequestUncertain=true;calibrationView()',run.context);assert.equal(run.nodes.get('calibration-stage').textContent,'Outcome unconfirmed');
 });
 
 test('resuming a hidden tab cannot reuse an expired save confirmation and invalid countdown metadata fails closed',()=>{
@@ -786,15 +788,25 @@ test('Save reveals and focuses its review group without committing; only explici
 });
 
 test('expiry during an in-flight Save never declares unsaved or asks for another retest/save',async()=>{
- for(const outcome of ['acknowledged','uncertain']){
+ for(const outcome of ['acknowledged','uncertain','http-error','invalid-json','missing-status']){
   let resolve,reject;const controlPromise=new Promise((yes,no)=>{resolve=yes;reject=no;});const run=setup({controlPromise});
   const s={...run.input(),status:'complete',measurements:measuredRounds(),calibration:calibrationState('ready_to_save',{saveReview:{status:'active',remainingMs:1000}})};
   run.accept(s);run.click('calibration-save');run.click('calibration-confirm-action');run.step(1100);
   assert.equal(run.nodes.get('calibration-review-window').hidden,true);assert.equal(run.nodes.get('results-title').textContent,'Waiting for controller confirmation');
   for(const id of ['results-next','results-effect','calibration-message','calibration-help'])assert.doesNotMatch(run.nodes.get(id).textContent,/unsaved|not been saved|Retest adjustment|choose Save/i,id);
+  for(const id of ['trial','retest','save','verify','inspect','reboot'])assert.doesNotMatch(run.nodes.get('calibration-'+id).attributes.title,/unsaved|not been saved|Retest adjustment|choose Save/i,id+' tooltip');
   assert.match(run.nodes.get('calibration-message').textContent,/Waiting for its outcome/);assert.equal(controlCommands(run).length,1);
-  if(outcome==='acknowledged')resolve({ok:true,json:async()=>({state:{...s,calibration:calibrationState('save_acknowledged')}})});else reject(new TypeError('Network response lost'));
+  if(outcome==='acknowledged')resolve({ok:true,json:async()=>({state:{...s,calibration:calibrationState('save_acknowledged')}})});
+  else if(outcome==='http-error')resolve({ok:false,json:async()=>({error:'Calibration worker exited before returning its result.'})});
+  else if(outcome==='invalid-json')resolve({ok:true,json:async()=>{throw new SyntaxError('Invalid JSON response');}});
+  else if(outcome==='missing-status')resolve({ok:true,json:async()=>({ok:true})});
+  else reject(new TypeError('Network response lost'));
   await new Promise(r=>setImmediate(r));run.step();
   assert.match(run.nodes.get('results-title').textContent,outcome==='acknowledged'?/Restart verification/:/Wait for calibration status/);assert.equal(controlCommands(run).length,1);
+  if(outcome!=='acknowledged'){
+   for(const id of ['trial','retest','save','verify','inspect','reboot']){assert.equal(run.nodes.get('calibration-'+id).disabled,true);assert.doesNotMatch(run.nodes.get('calibration-'+id).attributes.title,/unsaved|not been saved|Retest adjustment|choose Save/i,id+' tooltip');}
+   run.click('calibration-save');run.click('calibration-confirm-action');run.click('calibration-retest');assert.equal(controlCommands(run).length,1);
+   run.accept({...s,calibration:calibrationState('ambiguous')});run.step();assert.match(run.nodes.get('results-title').textContent,/uncertain calibration outcome/);
+  }
  }
 });

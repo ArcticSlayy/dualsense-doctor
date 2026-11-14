@@ -427,7 +427,7 @@
       for(const action of ['trial','retest','save','verify','inspect','reboot']){
         const node=$('calibration-'+action);node.hidden=action!=='inspect'&&!(action==='save'&&refresh)&&!relevant[action]?.includes(stage);node.disabled=!calibrationAllowed(action);
         if(['trial','retest','save','verify'].includes(action))attr(node,'class',((refresh?'retest':{trial_applied:'retest',ready_to_save:'save',save_acknowledged:'verify',ambiguous:'verify',changed:'verify'}[stage])===action)?'primary':'');
-        attr(node,'title',calibrationAllowed(action)?'':cal?.blockedReason||(refresh?reviewRecovery():null)||cal?.message||'This action is not available at this stage.');
+        attr(node,'title',calibrationAllowed(action)?'':pendingCalibrationAction||calibrationRequestUncertain?'Wait for confirmed controller status before another action.':cal?.blockedReason||(cal?.busy?'Wait for confirmed controller status before another action.':refresh?reviewRecovery():null)||cal?.message||'This action is not available at this stage.');
       }
       $('calibration-confirm-action').disabled=!calibrationConfirmation||!calibrationAllowed(calibrationConfirmation.action);
     }
@@ -475,7 +475,7 @@
       const cal=state?.calibration,stage=cal?.stage||'unknown',review=saveReviewNotice();
       $('calibration-confirm').hidden=!calibrationConfirmation;$('calibration-action-feedback').hidden=!calibrationConfirmation;
       const labels={measured:'This check measured input only',trial_applied:'Temporary adjustment · unsaved',ready_to_save:'Retested · review before saving',save_acknowledged:'Save acknowledged · restart verification needed',verified:'Matched after your confirmed restart',ambiguous:'Verification inconclusive',changed:'Calibration changed',unknown:'Start with a check'};
-      text('calibration-stage',labels[stage]||'Unknown');data($('calibration'),'stage',stage);
+      text('calibration-stage',pendingCalibrationAction?'Awaiting controller confirmation':calibrationRequestUncertain?'Outcome unconfirmed':cal?.busy?'Controller operation in progress':labels[stage]||'Unknown');data($('calibration'),'stage',stage);
       const needsReview=calibrationBusy()||['trial_applied','ready_to_save','save_acknowledged','ambiguous','changed'].includes(stage);
       data($('calibration'),'reviewRequired',needsReview);$('calibration-toggle').hidden=needsReview;
       if(needsReview)$('calibration').open=true;
@@ -613,9 +613,11 @@
       try{
         const r=await fetch(url('/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action}),referrerPolicy:'no-referrer',signal:AbortSignal.timeout(action.startsWith('calibration_')?60000:8000)});
         const data=await r.json();if(!r.ok||data.error)throw Error(data.error||'Could not '+action);
-        if(data.state)accept(data.state,'poll');else if(Object.hasOwn(data,'connected'))accept(data,'poll');
+        const responseState=data.state||(Object.hasOwn(data,'connected')?data:null);
+        if(action.startsWith('calibration_')&&(!responseState?.calibration||typeof responseState.calibration.stage!=='string'))throw Error('Calibration response is missing current status.');
+        if(responseState)accept(responseState,'poll');
         lastSseAt=0;await poll();return true;
-      }catch(e){if(action.startsWith('calibration_')&&['TimeoutError','AbortError','TypeError'].includes(e.name)){calibrationRequestUncertain=true;lastControlKey='';e=new Error('The calibration request timed out or lost its connection. The controller operation may still be running. Wait for server status; inspect the result before deciding what to do.');calibrationView();}lastWarning=e.message;stickyUntil=performance.now()+5000;text('feedback',e.message);$('feedback').dataset.warning='true';if(action==='lightbar'||action==='triggers'){const id=action==='lightbar'?'lightbar-status':'trigger-status';text(id,e.message);$(id).dataset.error='true';}text('action-status',e.message);$('action-status').hidden=false;announce(e.message);return false;}
+      }catch(e){if(action.startsWith('calibration_')){calibrationRequestUncertain=true;lastControlKey='';e=new Error('The calibration request did not return a confirmed result. The controller operation may still be running, or may have completed without a readable response. Wait for server status before another action. Detail: '+e.message);calibrationView();}lastWarning=e.message;stickyUntil=performance.now()+5000;text('feedback',e.message);$('feedback').dataset.warning='true';if(action==='lightbar'||action==='triggers'){const id=action==='lightbar'?'lightbar-status':'trigger-status';text(id,e.message);$(id).dataset.error='true';}text('action-status',e.message);$('action-status').hidden=false;announce(e.message);return false;}
       finally{pending=false;pendingCalibrationAction=null;controls();calibrationView();measurements();}
     }
     function startRound(){const roundTarget=Number($('round-target').value);if(![1,3,5].includes(roundTarget)||pending||calibrationBusy()||!fresh()||['running','paused'].includes(state?.status)||['trial_applied','ready_to_save'].includes(state?.calibration?.stage))return;command('start',{roundTarget});}

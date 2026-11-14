@@ -28,6 +28,11 @@ The server rechecks the deadline at Save, including when a tab was hidden or a f
 was delayed. No auto-save, approval extension or shortcut to reapprove old evidence
 is provided. Recovery uses the existing full retest action and its normal capture flow.
 
+While a request is pending, or its response fails or cannot be read, the card waits
+for updated controller status. It does not infer that nothing was saved from an HTTP
+error, lost connection or malformed response, and it does not offer a repeat write.
+Button tooltips and the status badge follow the same uncertainty rule as the result.
+
 For older running hosts without deadline metadata, the card shows no invented timer.
 A withdrawn review with prior after-results says the review needs refreshing, without
 claiming expiry was the cause. This UI compatibility path does not restart the host
