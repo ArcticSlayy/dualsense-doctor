@@ -8,6 +8,14 @@ A local toolkit for measuring DualSense stick input, reviewing calibration, and 
 
 [Upstream project](https://github.com/Sufxx/dualsense-doctor) · [MCP coaching](mcp/COACHING.md) · [Reviewed calibration](mcp/REVIEWED-CALIBRATION.md) · [Optional T3 card](mcp/T3-INTEGRATION.md) · [MIT license](LICENSE)
 
+## Start here
+
+1. **Connect and measure.** Use the browser app, or install the MCP below. In a compatible T3 client, ask for the live coaching card and choose **Start one check**. Follow its text cues; later phases advance automatically when the movement checks pass.
+2. **Read Results.** Compare movement at rest, range and release behavior. A check measures input; it does not change calibration. Reports save locally without a separate profile or recording step.
+3. **Choose your next step.** Try the controller in game, repeat a check if needed, or explicitly try a temporary center adjustment. Calibration, permanent Save, and restart verification are separate decisions.
+
+**Already adjusted the controller?** [Save, review expiry and recovery](mcp/SAVE-REVIEW-RECOVERY.md) explains the exact buttons and what each status means.
+
 ## ✨ Features
 
 - **Browser apps:** inspect live sticks, run drift and range diagnostics, and adjust adaptive triggers or the light bar with WebHID.
@@ -17,6 +25,13 @@ A local toolkit for measuring DualSense stick input, reviewing calibration, and 
 - **Optional T3 live card:** navigate Check, Results and Controller views, follow prominent stop/hands-off cues and a countdown, read a decision-first result with measured resting movement separated from optional game settings, compare before/after metrics, export a privacy-filtered PNG, and explicitly apply temporary effects. Browse saved checks with measured range plots and run a separate analog-trigger input check. Frame-gap diagnostics distinguish view cadence from feed rate.
 
 Measurement, temporary calibration, and saved controller calibration are separate actions. Read the calibration guide before using calibration controls.
+
+## Recent refinements
+
+- **Clearer Save flow:** Save opens and focuses a visible review; **Confirm save to controller** is a separate action. Pending or uncertain operations keep controls locked until updated status arrives.
+- **Review expiry explained:** the card shows the remaining review time when the host supplies it. An expired review needs **Retest adjustment**, not another center trial. Older hosts show recovery guidance without inventing a countdown.
+- **Readable results:** Check, Results and Controller views separate live guidance, before/after evidence, and optional controls. Repeated checks measure consistency; they do not automatically tune firmware.
+- **Smoother display work:** input updates are coalesced into animation frames and unchanged tables avoid redundant updates. FPS and input-feed rate are reported separately; neither proves end-to-end latency.
 
 ## 🧭 Calibration lifecycle
 
@@ -30,9 +45,21 @@ The optional live-coach calibration workflow is explicit and USB-only for a stan
 
 Trial, save, and reboot each require an explicit action. Restarting before saving discards the temporary trial. A save acknowledgement is not proof of persistence: the app records a local receipt, and no firmware save timestamp is available through this workflow. The workflow does not guarantee zero drift or repair worn components.
 
+| What the card says | What it means | Next step |
+|---|---|---|
+| Check complete | Input measured; no adjustment or save implied | Review Results and try it in game |
+| Temporary adjustment | Working calibration changed; not permanently saved | Complete **Retest adjustment** |
+| Review before saving | The tested candidate has a time-limited review | Review, then **Save calibration to controller → Confirm save to controller** if wanted |
+| Review needs refreshing | Save approval is unavailable; the temporary adjustment remains | **Retest adjustment**; no new center trial needed |
+| Save acknowledged | The controller acknowledged the save operation | Actually restart/power-cycle, then choose **I restarted — verify** |
+| Matched after restart confirmation | Readback matched after the owner confirmed a restart | Validate the feel and stability in game |
+| Uncertain outcome | The app cannot establish what completed | Wait for current status; do not retry the write automatically |
+
+Unplugging USB does not establish a power cycle if the controller stays powered. An older save or verification receipt does not verify a newer candidate.
+
 The existing gated `recalibrate_center` command is unchanged. When enabled with `DUALSENSE_MCP_ALLOW_CALIBRATION=1`, it performs its own center recalibration and save in one operation. It is not a save-only step for the reviewed candidate. Generic measurement tools do not write calibration.
 
-**Qualification:** independently reviewed implementation with hardware-free checks and live read-only inspection. An owner-operated run has recorded a temporary trial, Save acknowledgement and matching readback after restart confirmation. The app does not detect physical power cycles, and this is not broad hardware qualification.
+**Qualification:** independently reviewed code and hardware-free checks, plus limited owner-operated observations. Each candidate still needs its own restart verification. See [observed evidence and limits](mcp/REVIEWED-CALIBRATION.md#qualification).
 
 ## 🖥️ Browser apps
 
@@ -43,6 +70,8 @@ Use Chrome or Edge and connect a controller over a supported transport. From the
 ~~~
 
 Open the local address printed by the script. The Studio is at `/studio.html` and the diagnostic page at `/index.html`. Browser and transport support vary by operating system; see the [upstream instructions](https://github.com/Sufxx/dualsense-doctor).
+
+On Windows, or without Bash, run `python serve.py` instead. The launcher binds to `127.0.0.1` and serves only the browser app's listed public assets. It does not expose sessions, generated cards, configuration or repository metadata. Use `python serve.py 9000` to choose another port.
 
 ## 🔌 CLI
 

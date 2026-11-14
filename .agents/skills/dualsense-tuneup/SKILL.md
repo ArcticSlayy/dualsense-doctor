@@ -128,9 +128,18 @@ optional game-deadzone suggestion. Explain whether the current workflow is only 
 check, an unsaved trial or a save awaiting verification. Busy/uncertain operations
 take precedence over ordinary advice. Multi-check history is under optional repeats.
 
-If Save is unavailable after a completed retest, check the review status. The ten-minute
+If Save is unavailable after a completed retest, check the current operation and review
+status first. Pending, uncertain, acknowledged or verified outcomes take precedence
+over retest advice. A failed or unreadable HTTP response does not establish that
+nothing was saved; wait for updated status and do not repeat the write automatically.
+The ten-minute
 review can expire while the temporary candidate remains unsaved. Choose Retest adjustment
 to obtain a fresh full review; do not recapture a new center, extend approval or save
 automatically. Old local save dates do not establish that this candidate was saved.
 See mcp/SAVE-REVIEW-RECOVERY.md. Axis microtrim is assessed in
 mcp/AXIS-MICROTRIM-ASSESSMENT.md and is not an implemented or qualified tool.
+
+The first Save action reveals and focuses the review group; only the separate Confirm
+action sends the write. An older local save date does not verify a newer candidate.
+Unplugging USB while the controller remains powered is not a power cycle, and
+I restarted — verify confirms the owner's actual restart rather than performing one.

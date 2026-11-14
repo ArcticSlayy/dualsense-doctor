@@ -8,7 +8,7 @@ Call `show_live_coach` to prepare the card, then open its returned HTML path wit
 
 The card shows live stick axes, trigger/button input, battery estimate, available firmware information, coaching instructions, and evidence-based progress. A check covers rest, clockwise and counterclockwise range, release, buttons, and final verification. Phases advance only when their checks pass. Pause restarts the interrupted phase.
 
-Choose a 1, 3, or 5-round target. Each additional physical round starts only after an explicit Repeat action. The card holds up to ten rounds in one live comparison; generic `compare_sessions` can compare up to ten saved complete rounds. Saved reports can be read and compared, but continuous card progress is not guaranteed to resume across a process restart. Begin a new comparison after controller, transport, or calibration changes.
+Start with **Start one check**. Under **Optional: compare repeated checks**, 1, 3 or 5 is the total number of full checks, not automatic recordings or calibration writes. Each additional check starts only after **Repeat one check**. The card holds up to ten rounds in one live comparison; generic `compare_sessions` can compare up to ten saved complete rounds. Saved reports can be read and compared, but continuous card progress is not guaranteed to resume across a process restart. Begin a new comparison after controller, transport, or calibration changes.
 
 Deadzone values are conservative game-setting starting points from observed rounds. They are not applied and do not guarantee zero drift. Circularity, quiet peaks, and round spread are distinct measurements.
 
@@ -36,11 +36,17 @@ The card owns the HID handle while connected. Disconnect it before using another
 
 The optional `live_coach_control` actions provide **Check → temporary center trial → full retest → explicit exact-candidate save → owner-confirmed restart and readback**. The trial changes the controller's working calibration state, not a software-only view. It uses a three-second hands-off countdown and does not write range calibration or permanent memory. Save and restart are separate explicit actions and never run automatically.
 
-See [Reviewed calibration workflow](REVIEWED-CALIBRATION.md) for save receipts, acknowledgement limits, legacy `recalibrate_center` behavior, and qualification status. Automated tests do not establish physical accuracy or qualify controller writes. Physical trial and persistence checks remain pending.
+See [Reviewed calibration workflow](REVIEWED-CALIBRATION.md) for save receipts, acknowledgement limits, legacy `recalibrate_center` behavior, and current qualification limits. Limited owner-operated observations do not establish broad hardware qualification or verify a newer candidate.
+
+In Results, **Save calibration to controller** opens and focuses the review group;
+**Confirm save to controller** is a separate action. If the ten-minute review expires,
+use **Retest adjustment** to review the existing trial again. No new center trial is
+required. An older host without deadline metadata shows recovery guidance without
+a countdown. See [save-review recovery](SAVE-REVIEW-RECOVERY.md).
 
 ## Saved checks and analog trigger diagnostics
 
-The existing Customize panel contains **Load saved checks** and **Check trigger travel**.
+The **Controller** view contains **Load saved checks** and **Check trigger travel**.
 History is loaded only on request, outside the live feed. Each selected check shows
 its own latest calibration epoch and measured 48-direction range. Missing directions
 remain gaps, and the fixed 150% radial scale preserves genuine diagonal reach. No

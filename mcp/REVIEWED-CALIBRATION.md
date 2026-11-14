@@ -2,7 +2,14 @@
 
 This guide covers the optional calibration lifecycle controlled through `live_coach_control`. It is separate from guided measurements and the legacy gated recalibration command.
 
-**Qualification:** independently reviewed implementation with hardware-free checks and live read-only inspection. The new workflow has not yet had a controlled physical trial, save, restart, or persistence readback.
+## Qualification
+
+The implementation has independent code review and hardware-free checks. Limited
+owner-operated evidence records a temporary trial, Save acknowledgement and matching
+readback after the owner confirmed a restart. The app does not independently detect
+physical power cycles, and these observations are not broad hardware qualification.
+An older verified receipt does not verify a later candidate: each save needs its own
+actual restart and matching readback before persistence is reported as verified.
 
 ## Actions
 
@@ -14,6 +21,12 @@ This guide covers the optional calibration lifecycle controlled through `live_co
 6. **Explicit reboot request** (`calibration_reboot`) is separate and never automatic. Restarting with an unsaved temporary adjustment discards it and requires confirmation.
 
 The temporary trial is an adjustment in the controller's working state, not a software-only presentation change. Restarting before saving discards it.
+
+The review expires after ten minutes. If approval expires before saving, choose
+**Retest adjustment** to measure the existing trial again; no new center capture is
+needed. **Save calibration to controller** opens a visible review, and only the
+separate **Confirm save to controller** action sends the save request. See
+[save-review recovery](SAVE-REVIEW-RECOVERY.md) for countdown and older-host behavior.
 
 ## Evidence and limits
 
@@ -31,6 +44,10 @@ peaks also depend on how the stick is moved. Compare consistent physical checks
 and review trade-offs before retaining an adjustment.
 
 The workflow records a local last-saved receipt. No firmware save timestamp is available through this workflow, so this is not a firmware timestamp. “Save acknowledged” reports the NVS operation response; it does not prove persistence. Only owner-confirmed restart followed by matching readback reaches the verified state. Do not automatically retry an ambiguous write.
+
+USB removal alone is not a confirmed power cycle if the controller remains powered.
+The **I restarted — verify** action is the owner's confirmation of an actual restart,
+not a button that performs one.
 
 There is no guarantee of zero drift. Calibration cannot repair worn components. Reports describe observed data under recorded conditions, not future behavior.
 
